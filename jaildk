@@ -1,0 +1,918 @@
+#!/bin/sh
+
+version=1.00
+
+usage_jaildk() {
+    beg=`tput -T ${TERM:-cons25} md`
+    end=`tput -T ${TERM:-cons25} me`
+    usage=$(cat <<EOF
+This is jaildk version $version, a jail management toolkit.
+
+Usage: $0 <command> <mode-args>
+
+${beg}Building Jails:${end}
+base      - build a new base
+build     - install a build chroot of a jail
+create    - create a new jail from a template
+clone     - clone an existing jail or jail version
+
+${beg}Installing Jails:${end}
+install   - install a jail (prepare mounts, devfs etc)
+uninstall - uninstall a jail
+remove    - remove a jail or a jail version
+reinstall - stop, remove, install and start a jail
+
+${beg}Maintaining Jails:${end}
+start     - start a jail
+stop      - stop a jail
+restart   - restart a jail
+status    - display a jail's status
+rc        - execute an rc-script inside a jail
+
+${beg}Managing Jails:${end}
+login     - login into a jail (also available as separate command)
+blogin    - chroot into a build jail (dito)
+
+Run the <command> without arguments to get usage help about the command.
+
+EOF
+)
+     echo "$usage"
+     exit 1
+}
+
+ex() {
+    echo $rcscript - $*
+    $*
+}
+
+err () {
+   echo "$@" #>&2
+}
+
+bold() {
+    if [ -z "$BOLD_ON" ]; then
+        BOLD_ON=`tput -T ${TERM:-cons25} md`
+        export BOLD_ON
+        BOLD_OFF=`tput -T ${TERM:-cons25} me`
+        export BOLD_OFF
+    fi
+    echo -n "$BOLD_ON"
+    echo "$@"
+    echo -n "$BOLD_OFF"
+}
+
+die() {
+    bold "$*" >&2
+    exit 1
+}
+
+load-jail-config() {
+    jail=$1
+    if test -d $j/etc/$jail; then
+        . $j/etc/$jail/jail.conf
+    else
+        die "Jail $jail is not configured!"
+    fi
+}
+
+die_if_not_exist() {
+    jail=$1
+    which=$2
+
+    if test -z "$which"; then
+        which="Jail"
+    fi
+    if ! test -d $j/etc/$jail; then
+        die "$which $jail doesn't exist!"
+    fi
+}
+
+jaildk_build() {
+    jail=$1
+    mode=$2
+    base=$3
+    version=$4
+
+    if test -z "$mode"; then
+        echo "Usage: $0 build <jail name> <start|stop|status> [<base>] [<version>]"
+        exit 1
+    fi
+
+    if test -z "$base"; then
+        # default: latest
+        base=`ls $j/base | tail -1`
+    fi
+
+    jaildk_install $jail all $mode $base $version
+}
+
+jaildk_rc_mount() {
+    jail=$1
+    mode=$2
+    rw=$3
+    BASE=$4
+    VERSION=$5
+    rcscript=mount
+
+    load-jail-config $jail
+
+    conf=$j/etc/$jail/$rcscript.conf
+
+    if ! test -e "$conf"; then
+        return
+    fi
+
+    if test -n "$rw"; then
+        run=$j/build
+        if test -n "$BASE"; then
+            base=$BASE
+        fi
+        if test -n "$VERSION"; then
+            version=$VERSION
+        fi
+    else
+        run=$j/run
+    fi
+
+    die_if_not_exist $jail
+
+    # parse the config and (u)mount
+    case $mode in
+        stop)
+            tail -r $conf | grep -v "#"
+            ;;        
+        *)
+            grep -v "#" $conf
+            ;;
+    esac | while read LINE; do
+        # This command expands variables and performs field-splitting:
+        set -- $(eval echo \""$LINE"\")
+
+        # Skip empty lines:
+        case "$1" in
+            "")    continue ;;
+        esac
+
+        src=$1
+        dest=$2
+        fs=$3
+        opts=$4
+        size=$5
+        perm=$6
+
+        if test -n "$rw"; then
+            opts=`echo "$opts" | sed 's/ro/rw/g'`
+        fi
+
+        case $mode in
+            start)
+                if mount -v | grep " $run/$dest " > /dev/null ; then
+                    bold "$run/$dest already mounted!"
+                else
+                    case $fs in
+                        mfs)
+                            ex mdmfs -o $opts -s $size -p $perm md $run/$dest
+                            ;;
+                        nullfs)
+                            source=$j/$src
+                            if echo $src | egrep -q "^/"; then
+                              source=$src
+                            fi
+                            ex mount -t $fs -o $opts $source $run/$dest
+                            ;;
+                        devfs)
+                            ex mount -t devfs dev $run/$dest
+                            ;;
+                        *)
+                            bold "unknown filesystem type $fs!"
+                            ;;
+                    esac
+                fi
+                ;;
+            stop)
+                if mount -v | grep " $run/$dest " > /dev/null ; then
+                    ex umount $run/$dest
+                    if mount -v | grep " $run/$dest " > /dev/null ; then
+                        # still mounted! forcing
+                        ex umount -f $run/$dest
+                    fi
+                else
+                    bold "$run/$dest not mounted!"
+                fi
+                ;;
+            status)
+                if mount -v | grep " $run/$dest " > /dev/null ; then
+                    echo "$run/$dest mounted"
+                else
+                    bold "$run/$dest not mounted"
+                fi
+                ;;
+            *)
+                bold "Usage: $0 install <jail> mount {start|stop|status|restart}"
+                ;;
+        esac
+    done
+}
+
+jaildk_install_usage() {
+    err "Usage: $0 install <jail> [[<rc.d-script>] <start|stop|restart|status>]"
+    err "If <rc.d-script> is 'all' every script will be executed in rc-order."
+    err "If <rc.d-script> is not specified, just execute all scripts with <start>."
+    exit 1
+}
+        
+jaildk_install() {
+    jail=$1
+    rcd=$2
+    mode=$3
+
+    # used by jaildk_build() only
+    rw=$4
+    base=$5
+    version=$6
+
+    if test -z "$jail"; then
+        jaildk_install_usage
+    fi
+
+    if test -z "$rcd"; then
+        # default just install all
+        mode=start
+        rcd=all
+    else
+        case $rcd in
+            start|stop|restart|status)
+                # shift args
+                mode=$rcd
+                rcd=all
+                ;;
+        esac
+    fi
+
+    if test -z "$mode"; then
+        jaildk_install_usage
+    fi
+
+    die_if_not_exist $jail
+
+    if test "$rcd" = "all"; then
+        rcscripts="jaildk_rc_mount"
+    else
+        rcscripts="jaildk_rc_${rcd}"
+        if ! type "$rcscripts" > /dev/null 2>&1; then
+            die "rc function $rcd doesn't exist!"
+        fi
+    fi
+
+    case $mode in
+        start)
+            bold "Installing jail $jail"
+            ;;
+        stop)
+            bold "Unstalling jail $jail"
+            ;;
+    esac
+            
+    for rcscript in $rcscripts; do
+        $rcscript $jail $mode $rw $base $version
+    done
+}
+
+jaildk_uninstall() {
+    # wrapper around _install
+    jail=$1
+    rw=$2
+
+    if test -z "$jail"; then
+        err "Usage: $0 uninstall <jail> [<remove build>]"
+        exit 1
+    fi
+
+    die_if_not_exist $jail
+
+    if jls | egrep -q "${jail}"; then
+        die "Jail $jail($version) is still running, stop it before removing!"
+    fi
+
+    jaildk_install $jail all stop $rw
+}
+
+jaildk_base() {
+    base=$1
+
+    if echo "$base" | egrep -q "^/"; then
+        basedir=$j/base/$base
+    else
+        basedir=$base
+    fi
+
+    removelist="tests
+usr/bin/objdump
+usr/bin/llvm-profdata
+usr/bin/ranlib
+usr/bin/ar
+usr/bin/as
+usr/bin/llvm-tblgen
+usr/bin/llvm-symbolizer
+usr/bin/llvm-cov
+usr/bin/llvm-objdump
+usr/bin/ld.lld
+usr/bin/lldb
+usr/bin/cpp
+usr/bin/clang-cpp
+usr/bin/clang++
+usr/bin/clang
+usr/bin/cc
+usr/bin/c++
+usr/bin/lex
+usr/bin/lex++
+usr/bin/flex
+usr/bin/flex++
+usr/bin/telnet
+usr/bin/kadmin
+usr/bin/kcc
+usr/bin/kdestroy
+usr/bin/kdump
+usr/bin/keylogin
+usr/bin/keylogout
+usr/bin/kf
+usr/bin/kgetcred
+usr/bin/kinit
+usr/bin/klist
+usr/bin/kpasswd
+usr/bin/krb5-config
+usr/bin/ksu
+usr/bin/kswitch
+usr/bin/ktrace
+usr/bin/ktrdump
+usr/bin/finger
+usr/bin/crunch*
+usr/bin/ibv*
+usr/bin/nc
+usr/bin/pftp
+usr/bin/ssh*
+usr/bin/scp
+usr/bin/sftp
+usr/bin/svn*
+usr/bin/yacc
+usr/include
+usr/lib/*.a
+usr/lib32/*.a
+usr/share/doc
+usr/share/dict
+usr/share/examples
+usr/share/man
+rescue
+media
+mnt
+boot"
+    if test -z "$basedir"; then
+        die "Usage: $0 base <base dir>"
+    fi
+
+    if test -d "$basedir"; then
+        echo "base $basedir already exist!"
+        exit 1
+    else
+        ex mkdir -p $basedir
+        DISTRIBUTIONS="base.txz" bsdinstall jail $basedir
+        for file in $removelist; do
+            ex rm -rf $basedir/$file
+        done
+
+        ex rm -rf $basedir/var/db
+        ex ln -s /usr/local/db $basedir/var/db
+    fi
+}
+
+clone() {
+    srcdir=$1
+    dstdir=$2
+
+    if test -d $srcdir; then
+        if ! test -d $dstdir; then
+            mkdir -p $dstdir
+        fi
+
+        ex cpdup -x $srcdir $dstdir
+    else
+        echo "$srcdir doesn't exist, ignored"
+    fi
+}
+
+jaildk_clone() {
+    src=$1
+    new=$2
+    srcversion=$3
+    newversion=$4
+    update=""
+
+    if test -z "$new"; then
+        echo "Usage: $0 clone <source jail> <new jail> [<source version> [<new version>]]"
+        echo "Hints:"
+        echo "- if no source version has been given, tha latest version will be used."
+        echo "- if no new version has been given, source version will be used."
+        echo "- if source and new jail are the same, both versions must be given"
+        echo "  and a new version of the same jail will be created (update)"
+        exit 1
+    fi
+
+    if test "$src" = "$new"; then
+        # same jail, expect different versions
+        if test -z "$newversion" -o -z "$srcversion"; then
+            die "source and new version required!"
+        fi
+
+        if test "$srcversion" = "$newversion"; then
+            die "new version must be different from source version!"
+        fi
+        update=1
+    else
+        # clone from A to B
+        die_if_not_exist $src "Source jail"
+        die_if_not_exist $new "Destionation jail"
+
+        if test -z "$srcversion"; then
+            . $j/etc/$src/jail.conf
+            srcversion=$version
+            newversion=$version
+        else
+            if ! test -d $j/etc/$src/etc-$srcversion; then
+                die "Version $srcversion of source jail $src doesn't exist!"
+            else
+                if test -z "$newversion"; then
+                    newversion=$srcversion
+                fi
+            fi
+        fi
+    fi
+
+    clone $j/log/$src-$srcversion            $j/log/$new-$newversion
+    clone $j/home/$src/root-$srcversion      $j/home/$new/root-$newversion
+    clone $j/etc/$src/etc-$srcversion        $j/etc/$new/etc-$newversion
+    clone $j/etc/$src/local-etc-$srcversion  $j/etc/$new/local-etc-$newversion
+
+    if test -z "$update"; then
+        clone $j/data/$src/www   $j/data/$new/www
+        clone $j/data/$src/spool $j/data/$new/spool
+
+        ex cp -pRp $j/etc/$src/mount.conf $j/etc/$src/ports.conf $j/etc/$src/mtree.conf $j/etc/$new/
+
+        echo "Creating $j/etc/$src/jail.conf"
+        cat $j/etc/$src/jail.conf | egrep -v "^(name|version)=" >  $j/etc/$new/jail.conf
+        (echo "name=$new"; echo "version=$newversion")          >> $j/etc/$new/jail.conf
+
+        echo "Creating run and build dirs"
+        ex mkdir -p $j/run/$new
+        ex mkdir -p $j/build/$new
+    fi
+
+    echo "DONE."
+
+    if test -z "$update"; then
+        if ! egrep -q "^$new" /etc/jail.conf; then
+            bold "Consider adding the jail $new to /etc/jail.conf!"
+            echo
+        fi
+
+        bold "To mount the build chroot of the new jail, execute:"
+        echo "jaildk build $new start"
+        echo
+        bold "To login into the build chroot"
+        echo "jaildk blogin $new"
+        echo
+        bold "To mount the production chroot of the new jail, execute:"
+        echo "jaildk install $new"
+        echo
+        bold "To login into the build chroot"
+        echo "jaildk login $new"
+        echo
+        bold "To start the jail, execute:"
+        echo "jaildk start $new"
+        echo
+    else
+        . $j/etc/$src/jail.conf
+        bold "To mount the build chroot of the new jail, execute:"
+        echo "jaildk build $new start $base $newversion"
+    fi
+}
+
+jaildk_create() {
+    jail=$1
+    src=.template
+    
+    if test -z "$jail"; then
+        die "Usage: $0 create <jail>"
+    fi
+
+    . $j/etc/$src/jail.conf
+    srcversion=$version
+    newversion=`date +%Y%m%d`
+
+    mkdir -p $j/etc/$jail
+
+    jaildk_clone $src $jail $srcversion $newversion
+}
+
+remove() {
+    dir=$1
+
+    if test -d $dir; then
+        ex rm -rf $dir
+    else
+        echo "$dir doesn't exist anymore"
+    fi
+}
+
+jaildk_remove() {
+    jail=$1
+    version=$2
+
+    if test -z "$jail"; then
+        die "Usage: $0 remove <jail> [<version>]"
+    fi
+
+    if jls | egrep -q "${jail}"; then
+        die "Jail $jail($version) is still running, stop it before removing!"
+    fi
+
+    if mount | egrep -q "${jail}.*${version}"; then
+        die "Jail $jail($version) is still mounted, umount it before removing!"
+    fi
+
+    die_if_not_exist $jail
+
+    if test -n "$version"; then
+        if ! test -d $j/etc/$jail/etc-$version; then
+            die "Jail $jail $version doesn't exist!"
+        fi
+
+        remove $j/etc/$jail/etc-$version
+        remove $j/etc/$jail/local-etc-$version
+        remove $j/home/$jail/root-$version
+        remove $j/log/$jail-$version
+        remove $j/data/$jail/www
+        remove $j/data/$jail/spool
+    else
+        remove $j/etc/$jail
+        remove $j/home/$jail
+        remove $j/log/$jail-*
+        remove $j/data/$jail
+    fi
+}
+
+jaildk_jail_usage() {
+    die "Usage: $0 <start|stop|restart|status> <jail> | status"
+}
+
+
+jaildk_jail() {
+    mode=$1
+    jail=$2
+
+    if test -z "$mode"; then
+        jaildk_jail_usage
+    fi
+
+    if test -z "$jail" -a $mode = "status"; then
+        bold "Running jails:"
+        bold "   JID  IP Address      Hostname                      Path"
+        jls | grep -v JID
+        
+        bold "Mounted build jails:"
+        format="        %-15s %-29s %s\n"
+
+        bold "        Version         Hostname                      Path"
+        mount | egrep "local-etc.*build" | awk '{print $1}' | sed -e 's|/| |g' -e 's/local-etc-//' | while read j e jail version; do
+            printf "$format" $version $jail $j/build/$jail
+        done
+
+        jls | grep -v JID | awk '{print $3}' | while read J; do
+            jaildk_rc $J status
+        done
+    elif test -z "$jail"; then
+        jaildk_jail_usage
+    else
+        bold "Jail $jail $mode:"
+        case $mode in
+            status)
+                service jail $mode $jail | egrep "IP|$jail"
+                jaildk_rc $jail status
+                ;;
+            *)
+                service jail $mode $jail
+                ;;
+        esac
+    fi
+}
+
+get_rc_cripts() {
+    jail=$1
+
+    rcorder $j/run/$jail/usr/local/etc/rc.d/* $j/run/$jail/etc/rc.d/* | 
+        while read SCRIPT; do
+            rcvar=`egrep "^rcvar=" $SCRIPT | cut -d= -f2 | sed 's/"//g' | tail -1`
+            if egrep -iq "^${rcvar}=.*yes" $j/run/$jail/usr/local/etc/rc.conf; then
+                echo $SCRIPT | sed "s|$j/run/$jail||"
+            fi
+        done
+}
+
+jaildk_rc_usage() {
+    err "Usage: $0 rc <jail> {<rc-script> [<mode>]  |  <mode>}"
+    err "If <rc-script> is all, execute <mode> for every rc script"
+    err "<mode> must be a parameter of <rc-script>"
+    err "if only <mode> has been given, execute all scripts"
+    exit 1
+}
+
+jaildk_rc() {
+    jail=$1
+    rc=$2
+    mode=$3
+
+    if test -z "$rc"; then
+        jaildk_rc_usage
+    fi
+
+    if test -z "$mode"; then
+        # shift args
+        case $rc in
+            start|stop|restart|status)
+                # shift args
+                mode=$rc
+                rc=all
+                ;;
+            *)
+                jaildk_rc_usage
+                ;;
+        esac
+    fi
+
+    if ! jls | egrep -q "${jail}"; then
+        die "Jail $jail is not running."
+    fi
+
+    rcs=`get_rc_cripts $jail`
+
+    if test $rc = "all"; then
+        bold "Jail $jail rc status:"
+        for script in $rcs; do
+            jexec $jail $script $mode
+        done
+    else
+        ok=''
+        for script in $rcs; do
+            if echo "$script" | egrep -q "/$rc"; then
+                jexec $jail $script $mode
+                ok=1
+            fi
+        done
+
+        if test -z "$ok"; then
+            die "Script $rc doesn't exist in $jail or is not enabled."
+        fi
+    fi
+}
+
+jaildk_blogin() {
+    jail=$1
+
+    if test -z "$jail"; then
+        file=`basename $0`
+        if test "$file" = "jaildk"; then
+            file="$0 blogin"
+        else
+            file="$0"
+        fi
+        echo "Usage: $file <jail-name|jail-domain|jail-ip> [<user>]"
+        echo "mounted build jails:"
+        mount|egrep "base.*build" | awk '{print $3}' | cut -d/ -f 4
+        exit
+    fi
+
+    chroot="$j/build/$jail"
+
+    if ! test -d $chroot/root; then
+	    echo "build jail $jail not mounted!"
+	    echo "Mount it with jaildk build $jail start"
+	    exit 1
+    fi
+
+    shell=/bin/csh
+    term=vt100
+    home=/root
+    path=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+
+    if test -e $chroot/root/.bashrc; then
+        shell=/usr/local/bin/bash
+    fi
+
+    chroot $chroot /etc/rc.d/ldconfig onestart > /dev/null 2>&1
+    env - JAIL=$jail HOME=$home TERM=$term SHELL=$shell PATH=$path chroot $chroot $shell
+}
+
+jaildk_login() {
+    jail=$1
+    user=$2
+    me=`id -u` 
+    jexec="jexec"
+
+    if test -z "$jail"; then
+        file=`basename $0`
+        if test "$file" = "jaildk"; then
+            file="$0 jlogin"
+        else
+            file="$0"
+        fi
+        echo "Usage: $file <jail-name|jail-domain|jail-ip> [<user>]"
+        echo "available jails:"
+        jls
+        exit
+    fi
+
+    jid=""
+
+    jid=`jls | grep " $jail" | awk '{print $1}'`
+
+    if test -z "$jid"; then
+        echo "jail $jail doesn't run!"
+        exit 1
+    fi
+
+    shell=sh
+    home=/home/$user
+    term=vt100
+    path=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+    chroot_subdir=`grep "jail_${name}_rootdir" /etc/rc.conf | awk -F\" '{print $2}'`
+
+    if test -z "$user"; then
+        user=root
+    fi
+
+    if test "$me" != "0"; then
+        jexec="sudo $jexec"
+    fi
+
+    shell=/bin/sh
+    home=/
+
+    if grep "^$user" $chroot_subdir/etc/passwd > /dev/null 2>&1; then
+        shell=`grep "^$user" $chroot_subdir/etc/passwd | awk -F: '{print $7}' | sed 's/ //g'`
+        home=`grep "^$user" $chroot_subdir/etc/passwd | awk -F: '{print $6}' | sed 's/ //g'`
+    fi
+
+    env - JAIL=$jail HOME=$home TERM=$term SHELL=$shell PATH=$path $jexec -U $user $jid $shell
+}
+
+
+jaildk_reinstall() {
+    jail=$1
+
+    die_if_not_exist $jail
+
+    if jls | egrep -q "${jail}"; then
+        jaildk_jail stop $jail
+    fi
+
+    jaildk_uninstall $jail
+
+    sleep 0.2
+    sync
+
+    jaildk_install $jail start
+    jaildk_jail start $jail
+
+    sleep 0.2
+
+    jaildk_jail status $jail
+}
+
+
+jaildk_setup() {
+    j=$1
+
+    if test -z "$j"; then
+        die "Usage: $0 setup <base dir for jail environment>"
+    fi
+
+    bold "preparing directories"
+    ex mkdir -p $j
+    for subdir in etc bin appl base data home log run; do
+        ex mkdir -p $j/$subdir
+    done
+
+    version=`date +%Y%m%d`
+
+    for subdir in appl/default-$version/db appl/default-$version/etc etc/.template/etc etc/.template/local-etc-$version home/.template/root-$version log/.template-$version; do
+        ex mkdir -p $j/$subdir
+    done
+
+    bold "building jail template"
+    ex cpdup /etc $j/etc/.template-$version
+    echo "creating $j/etc/.template/etc-$version/rc.conf"
+    echo 'rc_conf_files="/etc/rc.conf /etc/rc.conf.local /usr/local/etc/rc.conf"' > $j/etc/.template/etc-$version/rc.conf
+
+    echo "creating $j/etc/.template/local-etc-$version/rc.conf"
+    echo 'hostname="TEMPLATE"
+sendmail_enable="NO"
+sendmail_submit_enable="NO"
+sendmail_outbound_enable="NO"
+sendmail_msp_queue_enable="NO"' > $j/etc/.template/local-etc-$version/rc.conf
+
+    bold "creating template config $j/etc/.template/jail.conf"
+    os=`uname -r`
+    (echo "base=$os"; echo "version=$version"; name=template) > $j/etc/.template/jail.conf
+
+    bold "creating template config $j/etc/.template/mount.conf"
+    echo 'base/$base                     $name                               nullfs  ro
+md                             $name/tmp                           mfs     rw,nosuid,async  128m 1777
+dev                            $name/dev                           devfs
+log/$name-$version             $name/var/log                       nullfs  rw
+appl/default-$version          $name/usr/local                     nullfs  ro
+etc/$name/etc-$version         $name/etc                           nullfs  ro
+etc/$name/local-etc-$version   $name/usr/local/etc                 nullfs  ro
+home/$name/root-$version       $name/root                          nullfs  rw' > $j/etc/.template/mount.conf
+
+    bold "creating template config $j/etc/.template/ports.conf"
+    (echo bash; echo ca_root_nss) > $j/etc/.template/ports.conf
+
+    bold "creating template config $j/etc/.template/mtree.conf"
+    touch $j/etc/.template/mtree.conf
+
+    bold "installing jaildk"
+    realj=`cd $j; pwd`
+    sed "s|^JAILDIR=.*|JAILDIR=$realj|" $0 > $j/bin/jaildk
+    ex chmod 755 $j/bin/jaildk
+
+    bold "configuring root shell template"
+    echo "# root shell inside jail
+alias h         history 25
+alias j         jobs -l
+alias la        ls -a
+alias lf        ls -FA
+alias ll        ls -lA
+alias l         ls -laF
+alias ..        cd ..
+alias ...       cd ../..
+alias ....      cd ../../../
+umask 22
+set path = (/sbin /bin /usr/sbin /usr/bin /usr/local/sbin /usr/local/bin)
+setenv  EDITOR  vi
+setenv  PAGER   less
+setenv  BLOCKSIZE       K
+if (\$?prompt) then
+ set chroot=`ps axu|grep /sbin/init | grep -v grep`
+ if("\$chroot" == "") then
+   set prompt = "(jail) %N@%m:%~ %# "
+ else
+   set prompt = "(build chroot) %N@%m:%~ %# "
+ endif
+ set promptchars = \"%#\"
+ set filec
+ set history = 1000
+ set savehist = (1000 merge)
+ set autolist = ambiguous
+ # Use history to aid expansion
+ set autoexpand
+ set autorehash
+endif
+" > $j/home/.template/root-$version/.cshrc
+
+    bold "building base"
+    echo -n "Do you want to build a base directory [Yn]? "
+    read yesno
+    case $yesno in
+        y|Y|yes|YES)
+            jaildk_base $j/base/$os
+            ;;
+    esac
+}
+
+
+##########################
+#
+# main()
+
+# will be modified during installation
+JAILDIR=/jail
+
+# globals
+j=$JAILDIR
+rcdir=$j/bin
+
+runner=$1
+shift
+
+case $runner in
+    start|stop|status|restart)
+        jaildk_jail $runner $*
+        ;;
+    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base)
+        jaildk_$runner $*
+        ;;
+    *)
+        usage_jaildk $*
+        ;;
+esac
