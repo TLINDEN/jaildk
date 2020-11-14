@@ -104,7 +104,7 @@ jaildk_build() {
         base=`ls $j/base | tail -1`
     fi
 
-    jaildk_install $jail all $mode $base $version
+    jaildk_install $jail all $mode rw $base $version
 }
 
 jaildk_rc_mount() {
