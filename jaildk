@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.01
+version=1.00
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -844,40 +844,6 @@ home/$name/root-$version       $name/root                          nullfs  rw' >
     realj=`cd $j; pwd`
     sed "s|^JAILDIR=.*|JAILDIR=$realj|" $0 > $j/bin/jaildk
     ex chmod 755 $j/bin/jaildk
-
-    bold "configuring root shell template"
-    echo "# root shell inside jail
-alias h         history 25
-alias j         jobs -l
-alias la        ls -a
-alias lf        ls -FA
-alias ll        ls -lA
-alias l         ls -laF
-alias ..        cd ..
-alias ...       cd ../..
-alias ....      cd ../../../
-umask 22
-set path = (/sbin /bin /usr/sbin /usr/bin /usr/local/sbin /usr/local/bin)
-setenv  EDITOR  vi
-setenv  PAGER   less
-setenv  BLOCKSIZE       K
-if (\$?prompt) then
- set chroot=`ps axu|grep /sbin/init | grep -v grep`
- if("\$chroot" == "") then
-   set prompt = "(jail) %N@%m:%~ %# "
- else
-   set prompt = "(build chroot) %N@%m:%~ %# "
- endif
- set promptchars = \"%#\"
- set filec
- set history = 1000
- set savehist = (1000 merge)
- set autolist = ambiguous
- # Use history to aid expansion
- set autoexpand
- set autorehash
-endif
-" > $j/home/.template/root-$version/.cshrc
 
     bold "building base"
     echo -n "Do you want to build a base directory [Yn]? "
