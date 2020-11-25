@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.02
+version=1.03
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
