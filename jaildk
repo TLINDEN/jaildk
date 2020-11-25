@@ -863,10 +863,10 @@ setenv  PAGER   less
 setenv  BLOCKSIZE       K
 if (\$?prompt) then
  set chroot=`ps axu|grep /sbin/init | grep -v grep`
- if("\$chroot" == "") then
-   set prompt = "(jail) %N@%m:%~ %# "
+ if("\$chroot" == \"\") then
+   set prompt = \"(jail) %N@%m:%~ %# \"
  else
-   set prompt = "(build chroot) %N@%m:%~ %# "
+   set prompt = \"(build chroot) %N@%m:%~ %# \"
  endif
  set promptchars = \"%#\"
  set filec
