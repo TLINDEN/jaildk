@@ -162,7 +162,9 @@ jaildk_rc_mount() {
         perm=$6
 
         if test -n "$rw"; then
-            opts=`echo "$opts" | sed 's/ro/rw/g'`
+            if ! echo $src | grep -q base/; then
+              opts=`echo "$opts" | sed 's/ro/rw/g'`
+            fi
         fi
 
         case $mode in
