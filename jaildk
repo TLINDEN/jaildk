@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.03
+version=1.04
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -810,7 +810,7 @@ jaildk_setup() {
     done
 
     bold "building jail template"
-    ex cpdup /etc $j/etc/.template-$version
+    ex cpdup /etc $j/etc/.template/etc-$version
     echo "creating $j/etc/.template/etc-$version/rc.conf"
     echo 'rc_conf_files="/etc/rc.conf /etc/rc.conf.local /usr/local/etc/rc.conf"' > $j/etc/.template/etc-$version/rc.conf
 
