@@ -106,10 +106,7 @@ jaildk_build() {
     fi
 
     jaildk_install $jail all $mode rw $base $version
-    if [ $2 = "start" ]; then
-        ex mount -t nullfs -o rw $j/ports/$version $run/$jail/usr/ports
-    fi
-
+    
 }
 
 jaildk_rc_mount() {
@@ -278,12 +275,24 @@ jaildk_install() {
             ;;
         stop)
             bold "Unstalling jail $jail"
+            if mount -v | grep " $j/build/$jail/usr/ports " > /dev/null ; then
+                if [ ! -z $rw ]; then
+                    echo "mount - umount $j/build/$jail/usr/ports"
+                    umount $j/build/$jail/usr/ports
+                fi
+            else
+                bold "$j/build/$jail/usr/ports not mounted!"
+            fi
             ;;
     esac
-            
+
     for rcscript in $rcscripts; do
         $rcscript $jail $mode $rw $base $version
     done
+    if [ $mode = "start" ]; then
+        ex mount -t nullfs -o rw $j/ports/$version $run/$jail/usr/ports
+    fi
+
 }
 
 jaildk_uninstall() {
