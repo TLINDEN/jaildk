@@ -302,8 +302,7 @@ jaildk_uninstall() {
 
 jaildk_base() {
     base=$1
-
-    if echo "$base" | egrep -q "^/"; then
+    if echo "$base" | egrep -vq "^/"; then
         basedir=$j/base/$base
     else
         basedir=$base
@@ -806,7 +805,7 @@ jaildk_setup() {
 
     version=`date +%Y%m%d`
 
-    for subdir in appl/default-$version/db appl/default-$version/etc etc/.template/etc etc/.template/local-etc-$version home/.template/root-$version log/.template-$version; do
+    for subdir in appl/default-$version/db appl/default-$version/etc etc/.template/etc-$version etc/.template/local-etc-$version home/.template/root-$version log/.template-$version; do
         ex mkdir -p $j/$subdir
     done
 
