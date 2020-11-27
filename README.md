@@ -146,9 +146,15 @@ Then install the build jail as usual:
 
 `jaildk build myjail`
 
-Finally, install the current ports collection:
+Install the current ports collection:
 
 `jaildk fetch`
+
+In case the  ports version created does not match  the version of your
+jail, you need  to configure the different ports version  in your jail
+config `/jail/etc/myjail/jail.conf` like this:
+
+`ports=20201127`
 
 Now you can enter the build jail and install ports the traditional way:
 

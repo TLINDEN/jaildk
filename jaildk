@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -Cf
+
 version=1.05
 
 usage_jaildk() {
@@ -48,7 +50,7 @@ ex() {
 }
 
 err () {
-   echo "$@" #>&2
+   echo "$@" >&2
 }
 
 bold() {
@@ -103,7 +105,7 @@ jaildk_build() {
     fi
 
     if test -n "buildbase"; then
-        base="$j/$buildbase"
+        base="$buildbase"
     elif test -z "$base"; then
         # not configured, use default: latest
         base=`ls $j/base | tail -1`
@@ -122,6 +124,10 @@ jaildk_rc_ports() {
     rcscript=ports
 
     load-jail-config $jail
+
+    if test -n "$ports"; then
+        version="$ports"
+    fi
 
     if test -n "$buildbase" -a -n "$rw"; then
         # we only support ports if a buildbase is configured
@@ -218,6 +224,15 @@ jaildk_rc_mount() {
                             if echo $src | egrep -q "^/"; then
                               source=$src
                             fi
+
+                            if ! test -d "$source"; then
+                                die "Source dir $source doesn't exist!"
+                            fi
+
+                            if ! test -d "$run/$dest"; then
+                                die "Dest dir $run/$dest doesn't exist!"
+                            fi
+
                             ex mount -t $fs -o $opts $source $run/$dest
                             ;;
                         devfs)
@@ -315,7 +330,7 @@ jaildk_install() {
     esac
 
     for rcscript in $rcscripts; do
-        $rcscript $jail $mode $rw $base $version
+        $rcscript $jail $mode $rw $base $version || exit 1
     done
 }
 
@@ -421,18 +436,32 @@ boot"
         exit 1
     else
         ex mkdir -p $basedir
-        DISTRIBUTIONS="base.txz" bsdinstall jail $basedir
+        bsdinstall jail $basedir
 
-        if test -n "$rw"; then
+        if test -z "$rw"; then
+            # run base
             for file in $removelist; do
                 ex rm -rf $basedir/$file
             done
-
+        else
+            # build base with ports support
             ex mkdir -p $basedir/usr/ports
         fi
 
+        ex mkdir $basedir/home
         ex rm -rf $basedir/var/db
         ex ln -s /usr/local/db $basedir/var/db
+
+        if test -n "$rw"; then
+            echo "You have choosen to create a build base with ports support"
+            echo -n "Want to fetch the ports collection now [Yn]? "
+            read yesno
+            case $yesno in
+                y|Y|yes|YES)
+                    jaildk_fetch
+                    ;;
+            esac
+        fi
     fi
 }
 
@@ -939,30 +968,28 @@ endif
     esac
 }
 
-jaildk_fetch_ports() {
+jaildk_fetch() {
     version=`date +%Y%m%d`
-    if [ -d "$j/ports/$version" ]; then
-        echo "Ports dir $version already exist. Do you want to recreate it? [y/N]"
+    if test -d "$j/ports/$version"; then
+        echo -n "Ports dir $version already exist. Do you want to recreate it [y/N]? "
         read yesno
         case $yesno in
             y|Y|yes|YES)
-                rm -rf $j/ports/$version
-                jaildk_fetch_ports_exec
+                ex rm -rf $j/ports/$version
+                jaildk_fetch_ports
                 ;;
         esac
     else
-        jaildk_fetch_exec
+        jaildk_fetch_ports
     fi
 }
 
-jaildk_fetch_ports_exec() {
-    fetch -o $j/ports/$version.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
-    mkdir -p $j/ports/$version
-    tar xzfC $j/ports/$version.tar.gz $j/ports/$version
-    cd $j/ports/$version/
-    mv ports/* .
-    cd -
-    rm -rf $j/ports/$version.tar.gz  $j/ports/$version/ports
+jaildk_fetch_ports() {
+    ex mkdir -p $j/ports/tmp
+    ex fetch -o $j/ports/tmp/ports.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
+    ex tar xzfC $j/ports/tmp/ports.tar.gz $j/ports/tmp/
+    ex mv $j/ports/tmp/ports $j/ports/$version
+    ex rm -rf $j/ports/tmp/ports*
 }
 
 ##########################
@@ -981,6 +1008,10 @@ rcdir=$j/bin
 
 runner=$1
 shift
+
+if test -z "$runner"; then
+    usage_jaildk
+fi
 
 case $runner in
     start|stop|status|restart)
