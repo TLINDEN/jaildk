@@ -987,7 +987,7 @@ jaildk_fetch() {
 jaildk_fetch_ports() {
     ex mkdir -p $j/ports/tmp
     ex fetch -o $j/ports/tmp/ports.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
-    ex tar xzfC $j/ports/tmp/ports.tar.gz $j/ports/tmp/
+    ex tar xzfC $j/ports/tmp $j/ports/tmp/ports.tar.gz
     ex mv $j/ports/tmp/ports $j/ports/$version
     ex rm -rf $j/ports/tmp/ports*
 }
