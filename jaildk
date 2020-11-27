@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.04
+version=1.05
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -95,18 +95,53 @@ jaildk_build() {
     base=$3
     version=$4
 
+    load-jail-config $jail
+
     if test -z "$mode"; then
         echo "Usage: $0 build <jail name> <start|stop|status> [<base>] [<version>]"
         exit 1
     fi
 
-    if test -z "$base"; then
-        # default: latest
+    if test -n "buildbase"; then
+        base="$j/$buildbase"
+    elif test -z "$base"; then
+        # not configured, use default: latest
         base=`ls $j/base | tail -1`
     fi
 
     jaildk_install $jail all $mode rw $base $version
     
+}
+
+jaildk_rc_ports() {
+    jail=$1
+    mode=$2
+    rw=$3
+    BASE=$4
+    VERSION=$5
+    rcscript=ports
+
+    load-jail-config $jail
+
+    if test -n "$buildbase" -a -n "$rw"; then
+        # we only support ports if a buildbase is configured
+        case $mode in
+            start)
+                if mount -v | grep -q " $j/build/$jail/usr/ports "; then
+                    bold "$j/build/$jail/usr/ports already mounted!"
+                else
+                    ex mount -t nullfs -o rw $j/ports/$version $j/build/$jail/usr/ports
+                fi
+                ;;
+            stop)
+                if mount -v | grep -q " $j/build/$jail/usr/ports "; then
+                    ex umount $j/build/$jail/usr/ports
+                else
+                    bold "$j/build/$jail/usr/ports not mounted!"
+                fi
+                ;;
+        esac
+    fi
 }
 
 jaildk_rc_mount() {
@@ -223,6 +258,7 @@ jaildk_install_usage() {
     err "Usage: $0 install <jail> [[<rc.d-script>] <start|stop|restart|status>]"
     err "If <rc.d-script> is 'all' every script will be executed in rc-order."
     err "If <rc.d-script> is not specified, just execute all scripts with <start>."
+    err "Available rc.d-scripts: $RCSCRIPTS"
     exit 1
 }
         
@@ -261,7 +297,7 @@ jaildk_install() {
     die_if_not_exist $jail
 
     if test "$rcd" = "all"; then
-        rcscripts="jaildk_rc_mount"
+        rcscripts="$RCSCRIPTS"
     else
         rcscripts="jaildk_rc_${rcd}"
         if ! type "$rcscripts" > /dev/null 2>&1; then
@@ -275,24 +311,12 @@ jaildk_install() {
             ;;
         stop)
             bold "Unstalling jail $jail"
-            if mount -v | grep " $j/build/$jail/usr/ports " > /dev/null ; then
-                if [ ! -z $rw ]; then
-                    echo "mount - umount $j/build/$jail/usr/ports"
-                    umount $j/build/$jail/usr/ports
-                fi
-            else
-                bold "$j/build/$jail/usr/ports not mounted!"
-            fi
             ;;
     esac
 
     for rcscript in $rcscripts; do
         $rcscript $jail $mode $rw $base $version
     done
-    if [ $mode = "start" ]; then
-        ex mount -t nullfs -o rw $j/ports/$version $run/$jail/usr/ports
-    fi
-
 }
 
 jaildk_uninstall() {
@@ -316,10 +340,13 @@ jaildk_uninstall() {
 
 jaildk_base() {
     base=$1
-    if echo "$base" | egrep -vq "^/"; then
-        basedir=$j/base/$base
-    else
-        basedir=$base
+    rw=$2
+
+    if test -z "$base"; then
+        err "Usage: $0 base <basename|basedir> [<rw>]"
+        err "If the <rw> has been set, the base will not cleaned up"
+        err "and will contain compilers and other build stuff. Use"
+        err "this if you want to use the ports collection."
     fi
 
     removelist="tests
@@ -382,8 +409,11 @@ rescue
 media
 mnt
 boot"
-    if test -z "$basedir"; then
-        die "Usage: $0 base <base dir>"
+
+    if echo "$base" | egrep -vq "^/"; then
+        basedir=$j/base/$base
+    else
+        basedir=$base
     fi
 
     if test -d "$basedir"; then
@@ -392,12 +422,15 @@ boot"
     else
         ex mkdir -p $basedir
         DISTRIBUTIONS="base.txz" bsdinstall jail $basedir
-        for file in $removelist; do
-            ex rm -rf $basedir/$file
-        done
 
-        ex mkdir -p $basedir/usr/ports
-        
+        if test -n "$rw"; then
+            for file in $removelist; do
+                ex rm -rf $basedir/$file
+            done
+
+            ex mkdir -p $basedir/usr/ports
+        fi
+
         ex rm -rf $basedir/var/db
         ex ln -s /usr/local/db $basedir/var/db
     fi
@@ -906,7 +939,7 @@ endif
     esac
 }
 
-jaildk_fetch() {
+jaildk_fetch_ports() {
     version=`date +%Y%m%d`
     if [ -d "$j/ports/$version" ]; then
         echo "Ports dir $version already exist. Do you want to recreate it? [y/N]"
@@ -914,7 +947,7 @@ jaildk_fetch() {
         case $yesno in
             y|Y|yes|YES)
                 rm -rf $j/ports/$version
-                jaildk_fetch_exec
+                jaildk_fetch_ports_exec
                 ;;
         esac
     else
@@ -922,14 +955,14 @@ jaildk_fetch() {
     fi
 }
 
-jaildk_fetch_exec() {
-            fetch -o $j/ports/$version.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
-            mkdir -p $j/ports/$version
-            tar xzfC $j/ports/$version.tar.gz $j/ports/$version
-            cd $j/ports/$version/
-            mv ports/* .
-            cd -
-            rm -rf $j/ports/$version.tar.gz  $j/ports/$version/ports
+jaildk_fetch_ports_exec() {
+    fetch -o $j/ports/$version.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
+    mkdir -p $j/ports/$version
+    tar xzfC $j/ports/$version.tar.gz $j/ports/$version
+    cd $j/ports/$version/
+    mv ports/* .
+    cd -
+    rm -rf $j/ports/$version.tar.gz  $j/ports/$version/ports
 }
 
 ##########################
@@ -938,6 +971,9 @@ jaildk_fetch_exec() {
 
 # will be modified during installation
 JAILDIR=/jail
+
+# install modules
+RCSCRIPTS="jaildk_rc_mount jaildk_rc_ports"
 
 # globals
 j=$JAILDIR

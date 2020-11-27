@@ -122,6 +122,42 @@ vi /usr/local/etc/nginx/nginx.conf
 Since  the build  chroot  is  writable you  can  install packages  and
 configure everything as needed.
 
+### Using the ports collection
+
+There might be cases when using pre build binary packages are not your
+thing. In such a case you want to use the [FreeBSD Ports Collection](https://www.freebsd.org/ports/).
+
+*jaildk* supports this, here are the steps required:
+
+#### Create a buildbase
+
+A  normal base  directory cannot  be  used with  the ports  collection
+because  jaildk removes  libraries and  binaries for  security reasons
+from normal bases. To create a build base, execute:
+
+`jaildk base 12-RELEASE-build rw`
+
+Next, add  the following entry  to the  configuration of you  jail. To
+stay with our example, edit `/jail/etc/myjail/jail.conf` and add:
+
+`buildbase=12-RELEASE-build`
+
+Then install the build jail as usual:
+
+`jaildk build myjail`
+
+Finally, install the current ports collection:
+
+`jaildk fetch`
+
+Now you can enter the build jail and install ports the traditional way:
+
+```
+jaildk blogin myjail
+cd /usr/ports/shells/bash
+make config-recursive install clean
+```
+
 ### When done, install and start the jail
 
 ```
