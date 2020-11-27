@@ -15,6 +15,7 @@ base      - build a new base
 build     - install a build chroot of a jail
 create    - create a new jail from a template
 clone     - clone an existing jail or jail version
+fetch     - fetch current port collection
 
 ${beg}Installing Jails:${end}
 install   - install a jail (prepare mounts, devfs etc)
@@ -105,6 +106,7 @@ jaildk_build() {
     fi
 
     jaildk_install $jail all $mode rw $base $version
+    
 }
 
 jaildk_rc_mount() {
@@ -273,12 +275,24 @@ jaildk_install() {
             ;;
         stop)
             bold "Unstalling jail $jail"
+            if mount -v | grep " $j/build/$jail/usr/ports " > /dev/null ; then
+                if [ ! -z $rw ]; then
+                    echo "mount - umount $j/build/$jail/usr/ports"
+                    umount $j/build/$jail/usr/ports
+                fi
+            else
+                bold "$j/build/$jail/usr/ports not mounted!"
+            fi
             ;;
     esac
-            
+
     for rcscript in $rcscripts; do
         $rcscript $jail $mode $rw $base $version
     done
+    if [ $mode = "start" ]; then
+        ex mount -t nullfs -o rw $j/ports/$version $run/$jail/usr/ports
+    fi
+
 }
 
 jaildk_uninstall() {
@@ -382,6 +396,8 @@ boot"
             ex rm -rf $basedir/$file
         done
 
+        ex mkdir -p $basedir/usr/ports
+        
         ex rm -rf $basedir/var/db
         ex ln -s /usr/local/db $basedir/var/db
     fi
@@ -799,7 +815,7 @@ jaildk_setup() {
 
     bold "preparing directories"
     ex mkdir -p $j
-    for subdir in etc bin appl base data home log run; do
+    for subdir in etc bin appl base data home log run ports; do
         ex mkdir -p $j/$subdir
     done
 
@@ -890,6 +906,31 @@ endif
     esac
 }
 
+jaildk_fetch() {
+    version=`date +%Y%m%d`
+    if [ -d "$j/ports/$version" ]; then
+        echo "Ports dir $version already exist. Do you want to recreate it? [y/N]"
+        read yesno
+        case $yesno in
+            y|Y|yes|YES)
+                rm -rf $j/ports/$version
+                jaildk_fetch_exec
+                ;;
+        esac
+    else
+        jaildk_fetch_exec
+    fi
+}
+
+jaildk_fetch_exec() {
+            fetch -o $j/ports/$version.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
+            mkdir -p $j/ports/$version
+            tar xzfC $j/ports/$version.tar.gz $j/ports/$version
+            cd $j/ports/$version/
+            mv ports/* .
+            cd -
+            rm -rf $j/ports/$version.tar.gz  $j/ports/$version/ports
+}
 
 ##########################
 #
@@ -909,7 +950,7 @@ case $runner in
     start|stop|status|restart)
         jaildk_jail $runner $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base)
+    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch)
         jaildk_$runner $*
         ;;
     *)
