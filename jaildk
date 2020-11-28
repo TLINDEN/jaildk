@@ -775,7 +775,7 @@ jaildk_rc_mtree() {
         else
             run=$j/run/$jail/
         fi
-        ex mtree -p $run -u -f $j/etc/$jail/mtree.conf | grep -v "extra:"
+        ex mtree -p $run -Ue -f $j/etc/$jail/mtree.conf | grep -v "extra:"
     fi
 }
 
