@@ -2,7 +2,7 @@
 
 set -Cf
 
-version=1.05
+version=1.06
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
