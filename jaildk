@@ -112,7 +112,8 @@ jaildk_build() {
     fi
 
     jaildk_install $jail all $mode rw $base $version
-    
+
+    ex chroot $j/build/$jail /etc/rc.d/ldconfig onestart
 }
 
 jaildk_rc_ports() {
@@ -456,9 +457,10 @@ var/tmp"
         ex ln -s /usr/local/db $basedir/var/db
 
         # add some symlinks from /var to /tmp to make pkg work properly 
-        ex ln -s ../tmp/var/cache $basedir/var/cache
-        ex ln -s ../tmp/var/run $basedir/var/run
-        ex ln -s ../tmp/var/tmp $basedir/var/tmp
+        ex rm -rf $basedir/var/tmp $basedir/var/cache $basedir/var/run
+        ex ln -s /tmp $basedir/var/tmp
+        ex ln -s /tmp $basedir/var/cache
+        ex ln -s /tmp $basedir/var/run
 
         if test -n "$rw"; then
             echo "You have choosen to create a build base with ports support"
