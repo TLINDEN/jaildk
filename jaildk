@@ -864,7 +864,7 @@ jaildk_blogin() {
     fi
 
     chroot $chroot /etc/rc.d/ldconfig onestart > /dev/null 2>&1
-    env - JAIL=$jail HOME=$home TERM=$term SHELL=$shell PATH=$path chroot $chroot $shell
+    env - HOME=$home TERM=$term SHELL=$shell PATH=$path chroot $chroot $shell
 }
 
 jaildk_login() {
