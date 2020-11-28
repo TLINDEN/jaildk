@@ -122,11 +122,31 @@ jaildk_build() {
     esac
 }
 
-jaildk_rc_rcoff() {
-    # avoid starting services inside the build chroot
+jaildk_rc_mtree() {
     jail=$1
     mode=$2
-    rw=$3
+    base=$3
+    version=$4
+    rw=$5
+
+    if [ $mode = "start" ]; then  
+        if test -n "$rw"; then
+            run=$j/build/$jail/
+        else
+            run=$j/run/$jail/
+        fi
+        ex mtree -p $run -Ue -f $j/etc/$jail/mtree.conf | grep -v "extra:"
+    fi
+}
+
+jaildk_rc_rcoff() {
+    # avoid starting services inside the build chroot
+    # + jaildk_rc_rcoff db start 12.1-RELEASE-p10 20201026
+    jail=$1
+    mode=$2
+    BASE=$3
+    VERSION=$4
+    rw=$5
     rcscript=rcoff
 
     if test -n "$rw"; then
@@ -160,9 +180,9 @@ jaildk_rc_rcoff() {
 jaildk_rc_ports() {
     jail=$1
     mode=$2
-    rw=$3
-    BASE=$4
-    VERSION=$5
+    BASE=$3
+    VERSION=$4
+    rw=$5
     rcscript=ports
 
     load-jail-config $jail
@@ -195,9 +215,9 @@ jaildk_rc_ports() {
 jaildk_rc_mount() {
     jail=$1
     mode=$2
-    rw=$3
-    BASE=$4
-    VERSION=$5
+    BASE=$3
+    VERSION=$4
+    rw=$5
     rcscript=mount
 
     load-jail-config $jail
@@ -375,7 +395,7 @@ jaildk_install() {
     esac
 
     for rcscript in $rcscripts; do
-        $rcscript $jail $mode $rw $base $version || exit 1
+        $rcscript $jail $mode $base $version $rw || exit 1
     done
 }
 
@@ -584,6 +604,7 @@ jaildk_clone() {
     clone $j/home/$src/root-$srcversion      $j/home/$new/root-$newversion
     clone $j/etc/$src/etc-$srcversion        $j/etc/$new/etc-$newversion
     clone $j/etc/$src/local-etc-$srcversion  $j/etc/$new/local-etc-$newversion
+    clone $j/etc/$src/local-etc-$srcversion  $j/etc/$new/local-etc-$newversion
 
     if test -z "$update"; then
         clone $j/data/$src/www   $j/data/$new/www
@@ -739,7 +760,7 @@ jaildk_jail() {
     fi
 }
 
-get_rc_cripts() {
+get_rc_scripts() {
     jail=$1
 
     rcorder $j/run/$jail/usr/local/etc/rc.d/* $j/run/$jail/etc/rc.d/* | 
@@ -786,7 +807,7 @@ jaildk_rc() {
         die "Jail $jail is not running."
     fi
 
-    rcs=`get_rc_cripts $jail`
+    rcs=`get_rc_scripts $jail`
 
     if test $rc = "all"; then
         bold "Jail $jail rc status:"
@@ -808,22 +829,6 @@ jaildk_rc() {
     fi
 }
 
-jaildk_rc_mtree() {
-    jail=$1
-    mode=$2
-    rw=$3
-    base=$4
-    version=$5
-
-    if [ $mode = "start" ]; then  
-        if test -n "$rw"; then
-            run=$j/build/$jail/
-        else
-            run=$j/run/$jail/
-        fi
-        ex mtree -p $run -Ue -f $j/etc/$jail/mtree.conf | grep -v "extra:"
-    fi
-}
 
 jaildk_blogin() {
     jail=$1
@@ -1085,7 +1090,7 @@ JAILDIR=/jail
 
 # install modules
 RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree"
-RCSCRIPTS_STOP="jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree"
+RCSCRIPTS_STOP="jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
 
 # globals
 j=$JAILDIR
