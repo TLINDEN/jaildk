@@ -604,7 +604,6 @@ jaildk_clone() {
     clone $j/home/$src/root-$srcversion      $j/home/$new/root-$newversion
     clone $j/etc/$src/etc-$srcversion        $j/etc/$new/etc-$newversion
     clone $j/etc/$src/local-etc-$srcversion  $j/etc/$new/local-etc-$newversion
-    clone $j/etc/$src/local-etc-$srcversion  $j/etc/$new/local-etc-$newversion
 
     if test -z "$update"; then
         clone $j/data/$src/www   $j/data/$new/www
