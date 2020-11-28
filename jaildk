@@ -1,8 +1,6 @@
 #!/bin/sh
 
-set -Cf
-
-version=1.06
+version=1.07
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -761,15 +759,16 @@ jaildk_jail() {
 }
 
 get_rc_scripts() {
-    jail=$1
+    jail="$1"
 
-    rcorder $j/run/$jail/usr/local/etc/rc.d/* $j/run/$jail/etc/rc.d/* | 
-        while read SCRIPT; do
-            rcvar=`egrep "^rcvar=" $SCRIPT | cut -d= -f2 | sed 's/"//g' | tail -1`
-            if egrep -iq "^${rcvar}=.*yes" $j/run/$jail/usr/local/etc/rc.conf; then
-                echo $SCRIPT | sed "s|$j/run/$jail||"
-            fi
-        done
+    files=$(ls $j/run/$jail/usr/local/etc/rc.d/* $j/run/$jail/etc/rc.d/*)
+
+    rcorder $files | while read SCRIPT; do
+        rcvar=`egrep "^rcvar=" $SCRIPT | cut -d= -f2 | sed 's/"//g' | tail -1`
+        if egrep -iq "^${rcvar}=.*yes" $j/run/$jail/usr/local/etc/rc.conf; then
+            echo $SCRIPT | sed "s|$j/run/$jail||"
+        fi
+    done
 }
 
 jaildk_rc_usage() {
@@ -1079,6 +1078,10 @@ jaildk_fetch_ports() {
     ex tar xzfC $j/ports/tmp/ports.tar.gz $j/ports/tmp
     ex mv $j/ports/tmp/ports $j/ports/$version
     ex rm -rf $j/ports/tmp/ports*
+}
+
+jaildk_freeze() {
+    jail=$1
 }
 
 ##########################
