@@ -111,9 +111,46 @@ jaildk_build() {
         base=`ls $j/base | tail -1`
     fi
 
+    # install the jail to build/
     jaildk_install $jail all $mode rw $base $version
 
-    ex chroot $j/build/$jail /etc/rc.d/ldconfig onestart
+    case $mode in
+        start)
+            # make it usable
+            ex chroot $j/build/$jail /etc/rc.d/ldconfig onestart
+            ;;
+    esac
+}
+
+jaildk_rc_rcoff() {
+    # avoid starting services inside the build chroot
+    jail=$1
+    mode=$2
+    rw=$3
+    rcscript=rcoff
+
+    if test -n "$rw"; then
+        # not required in run mode
+        case $mode in
+            start)
+                if ! test -d $j/etc/rcoff; then
+                    # in order to be backwards compatible to older jaildk
+                    # create the rcoff directory on the fly
+                    mkdir -d $j/etc/rcoff
+                    ( echo "#!/bin/sh"
+                      echo 'echo "$0 disabled in build chroot!"' ) > $j/etc/rcoff/rc
+                fi
+
+                ex mount -t unionfs $j/etc/rcoff $j/build/$jail/etc
+                ;;
+            stop)
+                # might fail if executed on a yet not union'ed etc
+                if mount | egrep -q "rcoff.*build/$jail"; then
+                    ex umount $j/build/$jail/etc
+                fi
+                ;;
+        esac
+    fi
 }
 
 jaildk_rc_ports() {
@@ -274,7 +311,7 @@ jaildk_install_usage() {
     err "Usage: $0 install <jail> [[<rc.d-script>] <start|stop|restart|status>]"
     err "If <rc.d-script> is 'all' every script will be executed in rc-order."
     err "If <rc.d-script> is not specified, just execute all scripts with <start>."
-    err "Available rc.d-scripts: $RCSCRIPTS"
+    err "Available rc.d-scripts: $RCSCRIPTS_START"
     exit 1
 }
         
@@ -313,7 +350,10 @@ jaildk_install() {
     die_if_not_exist $jail
 
     if test "$rcd" = "all"; then
-        rcscripts="$RCSCRIPTS"
+        case $mode in
+            start) rcscripts="$RCSCRIPTS_START";;
+            stop)  rcscripts="$RCSCRIPTS_STOP";;
+        esac
     else
         rcscripts="jaildk_rc_${rcd}"
         if ! type "$rcscripts" > /dev/null 2>&1; then
@@ -1040,7 +1080,8 @@ jaildk_fetch_ports() {
 JAILDIR=/jail
 
 # install modules
-RCSCRIPTS="jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree"
+RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree"
+RCSCRIPTS_STOP="jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree"
 
 # globals
 j=$JAILDIR
