@@ -34,6 +34,10 @@ ${beg}Managing Jails:${end}
 login     - login into a jail (also available as separate command)
 blogin    - chroot into a build jail (dito)
 
+${beg}Transferring Jails:${end}
+freeze    - freeze (build an image of) a jail
+thaw      - thaw (install) an image of a jail somewhere else
+
 Run the <command> without arguments to get usage help about the command.
 
 EOF
@@ -80,12 +84,20 @@ load-jail-config() {
 die_if_not_exist() {
     jail=$1
     which=$2
+    VERSION=$3
 
     if test -z "$which"; then
         which="Jail"
     fi
+
     if ! test -d $j/etc/$jail; then
         die "$which $jail doesn't exist!"
+    fi
+
+    if test -n "$VERSION"; then
+        if ! test -d $j/etc/$jail/etc-$VERSION; then
+            die "$which $jail $version doesn't exist!"
+        fi
     fi
 }
 
@@ -1080,9 +1092,215 @@ jaildk_fetch_ports() {
     ex rm -rf $j/ports/tmp/ports*
 }
 
+freeze_usage() {
+    echo "Usage: $0 freeze <jail> [options]
+Options:
+ -v <version>   freeze <version> of <jail>
+ -b             include the base layer (default: no)
+ -a             include the application layer (default: no)"
+    exit 1
+}
+
+freeze_dir() {
+    dstdir=$1
+    src=$2
+    srcdir=$(echo $src | cut -d/ -f1)
+    layer=$(echo $src | sed "s|$srcdir/||")
+    layerfile=$(echo $layer | sed 's|/|-|g')
+    ex tar -C $j/$srcdir -cpf $dstdir/$srcdir-$layerfile.tar $layer
+}
+
 jaildk_freeze() {
     jail=$1
+    shift
+
+    VERSION=""
+    ADDBASE=""
+    ADDAPPL=""
+
+    while getopts "abv:" arg; do
+        case $arg in
+            a) ADDAPPL=1;;
+            b) ADDBASE=1;;
+            v) VERSION=${OPTARG};;
+            *) freeze_usage;;
+        esac
+    done
+    
+    if test -z "$jail"; then
+        freeze_usage
+    fi
+
+    die_if_not_exist $jail "Jail to freeze" $VERSION
+
+    if jls | egrep -q "${jail}"; then
+        echo    "The jail $jail is actually running. It's recommended"
+        echo -n "to stop it before freezing. Stop the jail now [Ny]? "
+        read yesno
+        case $yesno in
+            y|Y|yes|YES|Yes)
+                service jail stop $jail
+            ;;
+        esac
+    fi
+
+    load-jail-config $jail
+
+    if test -n "$VERSION"; then
+        version=$VERSION
+    fi
+
+    bold "Freezing jail $jail $version"
+
+    host=$(hostname | cut -d\. -f1)
+    freeze=$j/images/$host-$jail-$version.tgz
+    tmp=$j/images/tmp/$jail-$version
+    ex mkdir -p $tmp
+
+    mountconf=$j/etc/$jail/mount.conf
+
+    if ! test -e "$mountconf"; then
+        die "$mountconf doesn't exist!"
+    fi
+
+    # create sub tarballs from every layer
+    grep -v "#" $mountconf | while read LINE; do
+        # this is a copy of the code in jaildk_rc_mount()
+        # FIXME: put this into a function somehow
+        set -- $(eval echo \""$LINE"\")
+
+        # Skip empty lines:
+        case "$1" in
+            "")    continue ;;
+        esac
+
+        src=$1
+        dest=$2
+        fs=$3
+        opts=$4
+        size=$5
+        perm=$6
+
+        case $fs in
+            nullfs)
+                if ! echo $src | egrep -q "^/"; then
+                    # only freeze nullfs mounts relative to $j
+                    if echo $src | egrep -q "^base/"; then
+                        if test -n "$ADDBASE"; then
+                            freeze_dir $tmp $src
+                        fi
+                    elif echo $src | egrep -q "^appl/"; then
+                        if test -n "$ADDAPPL"; then
+                            freeze_dir $tmp $src
+                        fi
+                    else
+                        freeze_dir $tmp $src
+                    fi
+                fi
+                ;;
+        esac
+    done
+
+    # add the jail config
+    files=$(find $j/etc/$jail -type f -maxdepth 1)
+    for file in $files; do
+        cp -pP $file $tmp/
+    done
+
+    # build the final image file
+    ex tar -C $j/images/tmp -cpf $freeze $jail-$version
+
+    # cleaning up
+    ex rm -rf $j/images/tmp
+
+    bold "Done, jail $jail frozen to $freeze."
 }
+
+thaw_tarball() {
+    srcdir=$1
+    tarball=$2
+
+    # etc-test-local-etc-20201128.tar
+    layer=$(echo $tarball | cut -d\- -f1)
+
+    if ! test -d $j/$layer; then
+        ex mkdir -p $j/$layer
+    fi
+
+    ex tar -C $j/$layer -xf $srcdir/$tarball
+    ex rm -f $srcdir/$tarball
+}
+
+jaildk_thaw() {
+    image=$1
+    J=$2 # just for testing
+
+    if test -n "$J"; then
+        j=$J
+    fi
+
+    jail=$(echo $image | cut -d\- -f2)
+    version=$(echo $image | cut -d\- -f3 | cut -d\. -f1)
+
+    if ! test -n "$version" -o -n "$jail"; then
+       err "Usage: $0 thaw <image>"
+       die "Image filename pattern: <host>-<jail>-<version>.tgz"
+    fi
+
+    if test -d $j/etc/$jail/etc-$version; then
+        bold -n "Jail $jail $version already exists, overwrite [Ny]? "
+        read yesno
+        case $yesno in
+            y|Y|yes|YES|Yes)
+                :;;
+            *)
+                echo "abort.";;
+        esac
+    fi
+
+    bold "Thawing jail $image"
+
+    tmp=$j/images/tmp
+    ex mkdir -p $tmp
+
+    # too many things can go wrong from here, so better abort on error
+    set -e
+
+    ex tar -C $tmp -xf $image
+
+    if ! test -d $tmp/$jail-$version; then
+        die "Invalid image format!"
+        ex rm -rf $tmp
+    fi
+
+    for tarball in `cd $tmp/$jail-$version && ls *.tar`; do
+        thaw_tarball $tmp/$jail-$version $tarball
+    done
+
+    files=$(find $tmp -type f)
+
+    bak=""
+    if test -e $j/etc/$jail/jail.conf; then
+        bold -n "$j/etc/$jail/jail.conf already exist. Overwrite configs [Ny]? "
+        read yesno
+        case $yesno in
+            y|Y|yes|YES|Yes)
+                :;;
+            *)
+                bold "Copying configs with extension -$version"
+                bak="-$version"
+                ;;
+        esac
+    fi
+        
+    for file in $files; do
+        filename=$(basename $file)
+        ex cp -Pp $file $j/etc/$jail/$filename$bak
+    done
+
+    bold "Done. Thawed jail $jail $version from $image."
+}
+
 
 ##########################
 #
@@ -1110,7 +1328,7 @@ case $runner in
     start|stop|status|restart)
         jaildk_jail $runner $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch)
+    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch|freeze|thaw)
         jaildk_$runner $*
         ;;
     *)
