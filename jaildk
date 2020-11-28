@@ -104,7 +104,7 @@ jaildk_build() {
         exit 1
     fi
 
-    if test -n "buildbase"; then
+    if test -n "$buildbase"; then
         base="$buildbase"
     elif test -z "$base"; then
         # not configured, use default: latest
@@ -423,7 +423,10 @@ usr/share/man
 rescue
 media
 mnt
-boot"
+boot
+var/run
+var/cache
+var/tmp"
 
     if echo "$base" | egrep -vq "^/"; then
         basedir=$j/base/$base
@@ -451,6 +454,11 @@ boot"
         ex mkdir $basedir/home
         ex rm -rf $basedir/var/db
         ex ln -s /usr/local/db $basedir/var/db
+
+        # add some symlinks from /var to /tmp to make pkg work properly 
+        ex ln -s ../tmp/var/cache $basedir/var/cache
+        ex ln -s ../tmp/var/run $basedir/var/run
+        ex ln -s ../tmp/var/tmp $basedir/var/tmp
 
         if test -n "$rw"; then
             echo "You have choosen to create a build base with ports support"
@@ -754,6 +762,23 @@ jaildk_rc() {
     fi
 }
 
+jaildk_rc_mtree() {
+    jail=$1
+    mode=$2
+    rw=$3
+    base=$4
+    version=$5
+
+    if [ $mode = "start" ]; then  
+        if test -n "$rw"; then
+            run=$j/build/$jail/
+        else
+            run=$j/run/$jail/
+        fi
+        ex mtree -p $run -u -f $j/etc/$jail/mtree.conf | grep -v "extra:"
+    fi
+}
+
 jaildk_blogin() {
     jail=$1
 
@@ -811,8 +836,9 @@ jaildk_login() {
     fi
 
     jid=""
-
-    jid=`jls | grep " $jail" | awk '{print $1}'`
+    echo $jail
+    jid=`jls | grep "$jail" | awk '{print $1}'`
+    echo $jid
 
     if test -z "$jid"; then
         echo "jail $jail doesn't run!"
@@ -883,13 +909,14 @@ jaildk_setup() {
 
     version=`date +%Y%m%d`
 
-    for subdir in appl/default-$version/db appl/default-$version/etc etc/.template/etc-$version etc/.template/local-etc-$version home/.template/root-$version log/.template-$version; do
+    for subdir in appl/default-$version/db/ports appl/default-$version/etc etc/.template/etc-$version etc/.template/local-etc-$version home/.template/root-$version log/.template-$version; do
         ex mkdir -p $j/$subdir
     done
 
     bold "building jail template"
     ex cpdup /etc $j/etc/.template/etc-$version
     echo "creating $j/etc/.template/etc-$version/rc.conf"
+    rm -f $j/etc/.template/etc-$version/rc.conf
     echo 'rc_conf_files="/etc/rc.conf /etc/rc.conf.local /usr/local/etc/rc.conf"' > $j/etc/.template/etc-$version/rc.conf
 
     echo "creating $j/etc/.template/local-etc-$version/rc.conf"
@@ -917,7 +944,18 @@ home/$name/root-$version       $name/root                          nullfs  rw' >
     (echo bash; echo ca_root_nss) > $j/etc/.template/ports.conf
 
     bold "creating template config $j/etc/.template/mtree.conf"
-    touch $j/etc/.template/mtree.conf
+#    touch $j/etc/.template/mtree.conf
+    echo '/set type=dir uid=0 gid=0 mode=01777
+.       type=dir mode=0755
+tmp
+var
+cache
+pkg
+..
+..
+run
+..
+tmp' > $j/etc/.template/mtree.conf
 
     bold "installing jaildk"
     realj=`cd $j; pwd`
@@ -941,7 +979,7 @@ setenv  EDITOR  vi
 setenv  PAGER   less
 setenv  BLOCKSIZE       K
 if (\$?prompt) then
- set chroot=`ps axu|grep /sbin/init | grep -v grep`
+ set chroot=`ps axu|grep /sbin/init | grep -v grep | awk '{print $1}'`
  if("\$chroot" == \"\") then
    set prompt = \"(jail) %N@%m:%~ %# \"
  else
@@ -987,7 +1025,7 @@ jaildk_fetch() {
 jaildk_fetch_ports() {
     ex mkdir -p $j/ports/tmp
     ex fetch -o $j/ports/tmp/ports.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
-    ex tar xzfC $j/ports/tmp $j/ports/tmp/ports.tar.gz
+    ex tar xzfC $j/ports/tmp/ports.tar.gz $j/ports/tmp
     ex mv $j/ports/tmp/ports $j/ports/$version
     ex rm -rf $j/ports/tmp/ports*
 }
@@ -1000,7 +1038,7 @@ jaildk_fetch_ports() {
 JAILDIR=/jail
 
 # install modules
-RCSCRIPTS="jaildk_rc_mount jaildk_rc_ports"
+RCSCRIPTS="jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree"
 
 # globals
 j=$JAILDIR
