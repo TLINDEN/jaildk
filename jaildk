@@ -118,6 +118,7 @@ jaildk_build() {
         start)
             # make it usable
             ex chroot $j/build/$jail /etc/rc.d/ldconfig onestart
+            ex mkdir -p $j/build/$jail/usr/local/db
             ;;
     esac
 }
