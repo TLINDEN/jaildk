@@ -11,14 +11,14 @@ This is jaildk version $version, a jail management toolkit.
 Usage: $0 <command> <mode-args>
 
 ${beg}Building Jails:${end}
-base      - build a new base
-build     - install a build chroot of a jail
-create    - create a new jail from a template
-clone     - clone an existing jail or jail version
-fetch     - fetch current port collection
+base -b <name> [-w]                              - build a new base
+build <jail> <mode> [-b <base>] [-v <version>]   - install a build chroot of a jail
+create                                           - create a new jail from a template
+clone -s <src> -d <dst> [-o <v>] [-n <v>]        - clone an existing jail or jail version
+fetch                                            - fetch current port collection
 
 ${beg}Installing Jails:${end}
-install   - install a jail (prepare mounts, devfs etc)
+install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
 uninstall - uninstall a jail
 remove    - remove a jail or a jail version
 reinstall - stop, remove, install and start a jail
@@ -31,12 +31,12 @@ status    - display a jail's status
 rc        - execute an rc-script inside a jail
 
 ${beg}Managing Jails:${end}
-login     - login into a jail (also available as separate command)
-blogin    - chroot into a build jail (dito)
+login <jail>                       - login into a jail (also available as separate command)
+blogin <jail>                      - chroot into a build jail (dito)
 
 ${beg}Transferring Jails:${end}
-freeze    - freeze (build an image of) a jail
-thaw      - thaw (install) an image of a jail somewhere else
+freeze <jail> [-a -b -v <version>]  - freeze (build an image of) a jail
+thaw <image>                        - thaw (install) an image of a jail
 
 Run the <command> without arguments to get usage help about the command.
 
@@ -101,28 +101,44 @@ die_if_not_exist() {
     fi
 }
 
+usage_build() {
+    die "Usage: $0 build <jail name> <start|stop|status> [-b <base>] [-v <version>]"
+}
+
 jaildk_build() {
     jail=$1
     mode=$2
-    base=$3
-    version=$4
+    shift
+    shift
+    
+    base=''
+    version=''
 
-    load-jail-config $jail
+    while getopts "b:v:" arg; do
+        case $arg in
+            b) base=1;;
+            v) version=${OPTARG};;
+            *) usage_build;;
+        esac
+    done
 
     if test -z "$mode"; then
-        echo "Usage: $0 build <jail name> <start|stop|status> [<base>] [<version>]"
-        exit 1
+        usage_build
     fi
+
+    die_if_not_exist $jail $version
+
+    load-jail-config $jail
 
     if test -n "$buildbase"; then
         base="$buildbase"
     elif test -z "$base"; then
-        # not configured, use default: latest
+        # nothing configured, use default: latest
         base=`ls $j/base | tail -1`
     fi
 
     # install the jail to build/
-    jaildk_install $jail all $mode rw $base $version
+    jaildk_install $jail $mode -r all -w -b $base -v $version
 
     case $mode in
         start)
@@ -342,45 +358,54 @@ jaildk_rc_mount() {
     done
 }
 
-jaildk_install_usage() {
-    err "Usage: $0 install <jail> [[<rc.d-script>] <start|stop|restart|status>]"
-    err "If <rc.d-script> is 'all' every script will be executed in rc-order."
-    err "If <rc.d-script> is not specified, just execute all scripts with <start>."
-    err "Available rc.d-scripts: $RCSCRIPTS_START"
-    exit 1
+usage_install() {
+    die "Usage: $0 install <jail> [<mode>] [-r rc-function]
+Install <jail> according to its config. Options:
+<mode>          Mode can either be start, stop or status. default: start
+-r <function>   Only execute function with <mode> parameter. default: all.
+
+Available rc.d-scripts: $RCSCRIPTS_START"
 }
         
 jaildk_install() {
     jail=$1
-    rcd=$2
-    mode=$3
+    mode=$2
+    shift
+    shift
+    rcd=''
 
-    # used by jaildk_build() only
-    rw=$4
-    base=$5
-    version=$6
+    # options -b -w -v are undocumented, used by jaildk_build() only
+    rw=''
+    base=''
+    version=''
+
+    while getopts "r:wb:v:" arg; do
+        case $arg in
+            w) rw=1;;
+            b) base=${OPTARG};;
+            v) version=${OPTARG};;
+            r) rcd=${OPTARG};;
+            *) freeze_usage;;
+        esac
+    done
 
     if test -z "$jail"; then
-        jaildk_install_usage
-    fi
-
-    if test -z "$rcd"; then
-        # default just install all
-        mode=start
-        rcd=all
-    else
-        case $rcd in
-            start|stop|restart|status)
-                # shift args
-                mode=$rcd
-                rcd=all
-                ;;
-        esac
+        usage_install
     fi
 
     if test -z "$mode"; then
-        jaildk_install_usage
+        mode=start
     fi
+
+    if test -z "$rcd"; then
+        # default just install everything
+        rcd=all
+    fi
+    
+    case $mode in
+        start|stop|restart|status) :;;
+        *) usage_install;;
+    esac
 
     die_if_not_exist $jail
 
@@ -413,7 +438,7 @@ jaildk_install() {
 jaildk_uninstall() {
     # wrapper around _install
     jail=$1
-    rw=$2
+    rw=$2 # FIXME !!!!!!!!!! getopt !!!!!!!!!!
 
     if test -z "$jail"; then
         err "Usage: $0 uninstall <jail> [<remove build>]"
@@ -426,18 +451,33 @@ jaildk_uninstall() {
         die "Jail $jail($version) is still running, stop it before removing!"
     fi
 
-    jaildk_install $jail all stop $rw
+    jaildk_install $jail stop -r all -w
+}
+
+
+usage_base() {
+    die "Usage: $0 base -b <basename|basedir> [-w]
+-b <name>     <name> can be the name of a base (e.g. 12.2-RELEASE)
+              or a directory where it shall be created
+-w            Create a writable base, including compiler and other
+              build stuff. Use this if you want to use the ports
+              collection."
 }
 
 jaildk_base() {
-    base=$1
-    rw=$2
+    base=""
+    rw=""
+
+    while getopts "b:w" arg; do
+        case $arg in
+            w) rw=1;;
+            b) base=${OPTARG};;
+            *) usage_base;;
+        esac
+    done
 
     if test -z "$base"; then
-        err "Usage: $0 base <basename|basedir> [<rw>]"
-        err "If the <rw> has been set, the base will not cleaned up"
-        err "and will contain compilers and other build stuff. Use"
-        err "this if you want to use the ports collection."
+        usage_base
     fi
 
     removelist="tests
@@ -565,21 +605,40 @@ clone() {
     fi
 }
 
+usage_clone() {
+    die "Usage: $0 clone -s <jail> -d <jail> [-o <version>] [-n <version>]
+-s <jail>        Source jail to clone from
+-d <jail>        Destionation jail to create from source
+-o <version>     Old version
+-n <version>     New version
+
+Hints:
+- if no source version has been given, tha latest version will be used.
+- if no new version has been given, source version will be used.
+- if source and new jail are the same, both versions must be given
+  and a new version of the same jail will be created (update)"
+}
+
 jaildk_clone() {
-    src=$1
-    new=$2
-    srcversion=$3
-    newversion=$4
-    update=""
+    src=''
+    new=''
+    srcversion=''
+    newversion=''
+    update=''
+
+    while getopts "s:d:o:n:" arg; do
+        case $arg in
+            o) srcversion=${OPTARG};;
+            n) newversion=${OPTARG};;
+            s) src=${OPTARG};;
+            d) new=${OPTARG};;
+            *) usage_clone;;
+        esac
+    done
+
 
     if test -z "$new"; then
-        echo "Usage: $0 clone <source jail> <new jail> [<source version> [<new version>]]"
-        echo "Hints:"
-        echo "- if no source version has been given, tha latest version will be used."
-        echo "- if no new version has been given, source version will be used."
-        echo "- if source and new jail are the same, both versions must be given"
-        echo "  and a new version of the same jail will be created (update)"
-        exit 1
+        usage_clone
     fi
 
     if test "$src" = "$new"; then
@@ -661,12 +720,16 @@ jaildk_clone() {
     fi
 }
 
+usage_create() {
+    die "Usage: $0 create <jail>"
+}
+
 jaildk_create() {
     jail=$1
     src=.template
     
     if test -z "$jail"; then
-        die "Usage: $0 create <jail>"
+        usage_create
     fi
 
     . $j/etc/$src/jail.conf
@@ -675,7 +738,7 @@ jaildk_create() {
 
     mkdir -p $j/etc/$jail
 
-    jaildk_clone $src $jail $srcversion $newversion
+    jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
 }
 
 remove() {
@@ -1063,7 +1126,7 @@ endif
     read yesno
     case $yesno in
         y|Y|yes|YES)
-            jaildk_base $j/base/$os
+            jaildk_base -b $j/base/$os
             ;;
     esac
 }
@@ -1092,7 +1155,7 @@ jaildk_fetch_ports() {
     ex rm -rf $j/ports/tmp/ports*
 }
 
-freeze_usage() {
+usage_freeze() {
     echo "Usage: $0 freeze <jail> [options]
 Options:
  -v <version>   freeze <version> of <jail>
@@ -1123,12 +1186,12 @@ jaildk_freeze() {
             a) ADDAPPL=1;;
             b) ADDBASE=1;;
             v) VERSION=${OPTARG};;
-            *) freeze_usage;;
+            *) usage_freeze;;
         esac
     done
     
     if test -z "$jail"; then
-        freeze_usage
+        usage_freeze
     fi
 
     die_if_not_exist $jail "Jail to freeze" $VERSION
@@ -1231,9 +1294,12 @@ thaw_tarball() {
     ex rm -f $srcdir/$tarball
 }
 
+usage_thaw() {
+    die "Usage: $0 thaw <image>"
+}
+
 jaildk_thaw() {
     image=$1
-    J=$2 # just for testing
 
     if test -n "$J"; then
         j=$J
@@ -1243,8 +1309,7 @@ jaildk_thaw() {
     version=$(echo $image | cut -d\- -f3 | cut -d\. -f1)
 
     if ! test -n "$version" -o -n "$jail"; then
-       err "Usage: $0 thaw <image>"
-       die "Image filename pattern: <host>-<jail>-<version>.tgz"
+        usage_thaw
     fi
 
     if test -d $j/etc/$jail/etc-$version; then
