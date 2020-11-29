@@ -782,7 +782,7 @@ jaildk_create() {
     jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
     # some perl magic to extract the hostname (if any) from /etc/jail.conf - and write it into the jails rc.conf
     jailhostname=$(cat /etc/jail.conf | tr -d '\t\r\n ' | perl -ne '$_ =~ /.*'"$newjail"'(\{(?:\{.*\}|[^{])*\})|\w+/; print $1;' | grep -oE 'hostname=[^;]+' | cut -d= -f2)
-    sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
+    [ -n "$jailhostname" ] && sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
     
     
 }
