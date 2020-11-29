@@ -407,7 +407,7 @@ jaildk_install() {
             b) base=${OPTARG};;
             v) version=${OPTARG};;
             r) rcd=${OPTARG};;
-            *) freeze_usage;;
+            *) usage_install;;
         esac
     done
 
