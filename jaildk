@@ -751,6 +751,7 @@ jaildk_clone() {
         echo
     else
         . $j/etc/$src/jail.conf
+        jail=$new
         bold "To mount the build chroot of the new jail, execute:"
         echo "jaildk build $new start $base $newversion"
     fi
@@ -763,6 +764,9 @@ Create a new jail from template."
 
 jaildk_create() {
     jail=$1
+    # $jail gets overwritten in jaildk_clone or some subcall to .template :-( ...
+    newjail=$jail
+    
     src=.template
     
     if test -z "$jail"; then
@@ -774,8 +778,13 @@ jaildk_create() {
     newversion=`date +%Y%m%d`
 
     mkdir -p $j/etc/$jail
-
+    
     jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
+    # some perl magic to extract the hostname (if any) from /etc/jail.conf - and write it into the jails rc.conf
+    jailhostname=$(cat /etc/jail.conf | tr -d '\t\r\n ' | perl -ne '$_ =~ /.*'"$newjail"'(\{(?:\{.*\}|[^{])*\})|\w+/; print $1;' | grep -oE 'hostname=[^;]+' | cut -d= -f2)
+    sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
+    
+    
 }
 
 remove() {
