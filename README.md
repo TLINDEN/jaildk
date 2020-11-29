@@ -57,7 +57,7 @@ jail_enable="YES"
 ```
 
 You may need to replace the interface name `em0` with the one in use on your system.
-To apply the alias to the interface you can use the netif rc script: `/etc/rc.d/netif restart`.
+You might need to restart the interface to apply the alias: `/etc/rc.d/netif restart`.
 
 ### Create the jail
 ```
