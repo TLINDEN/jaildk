@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.07
+version=1.08
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -19,31 +19,43 @@ fetch                                            - fetch current port collection
 
 ${beg}Installing Jails:${end}
 install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
-uninstall - uninstall a jail
-remove    - remove a jail or a jail version
-reinstall - stop, remove, install and start a jail
+uninstall <jail> [-w]                            - uninstall a jail
+remove <jail>                                    - remove a jail or a jail version
+reinstall <jail>                                 - stop, remove, install and start a jail
 
 ${beg}Maintaining Jails:${end}
-start     - start a jail
-stop      - stop a jail
-restart   - restart a jail
-status    - display a jail's status
-rc        - execute an rc-script inside a jail
+start <jail>                                     - start a jail
+stop <jail>                                      - stop a jail
+restart <jail>                                   - restart a jail
+status [<jail>]                                  - display a jail's status
+rc <jail> <mode> [-r <rc.d script>]              - execute an rc-script inside a jail
 
 ${beg}Managing Jails:${end}
-login <jail>                       - login into a jail (also available as separate command)
-blogin <jail>                      - chroot into a build jail (dito)
+login <jail> [<user>]                            - login into a jail
+blogin <jail>                                    - chroot into a build jail
 
 ${beg}Transferring Jails:${end}
-freeze <jail> [-a -b -v <version>]  - freeze (build an image of) a jail
-thaw <image>                        - thaw (install) an image of a jail
+freeze <jail> [-a -b -v <version>]               - freeze (build an image of) a jail
+thaw <image>                                     - thaw (install) an image of a jail
 
-Run the <command> without arguments to get usage help about the command.
+${beg}Getting help:${end}
+help <command>                                   - request help on <command>
 
 EOF
 )
-     echo "$usage"
-     exit 1
+    echo "$usage"
+    exit 1
+}
+
+usage_help() {
+    command=$1
+
+    usage="usage_${command}"
+    if ! type "$usage" > /dev/null 2>&1; then
+        die "Unknown command $command!"
+    else
+        $usage
+    fi
 }
 
 ex() {
@@ -65,6 +77,11 @@ bold() {
     echo -n "$BOLD_ON"
     echo "$@"
     echo -n "$BOLD_OFF"
+}
+
+fin() {
+    echo "$*" >&2
+    exit
 }
 
 die() {
@@ -102,7 +119,11 @@ die_if_not_exist() {
 }
 
 usage_build() {
-    die "Usage: $0 build <jail name> <start|stop|status> [-b <base>] [-v <version>]"
+    fin "Usage: $0 build <jail> [<start|stop|status>] [-b <base>] [-v <version>]
+Mount <jail> to $j/build read-writable for maintenance. Options:
+-b <base>     Use specified <base>. default: use configured base.
+-v <version>  Mount <version> of <jail>.
+<mode>        One of start, stop or status. default: start."
 }
 
 jaildk_build() {
@@ -116,14 +137,14 @@ jaildk_build() {
 
     while getopts "b:v:" arg; do
         case $arg in
-            b) base=1;;
+            b) base=${OPTARG};;
             v) version=${OPTARG};;
             *) usage_build;;
         esac
     done
 
     if test -z "$mode"; then
-        usage_build
+        mode=start
     fi
 
     die_if_not_exist $jail $version
@@ -155,6 +176,7 @@ jaildk_rc_mtree() {
     base=$3
     version=$4
     rw=$5
+    rcscript=mtree
 
     if [ $mode = "start" ]; then  
         if test -n "$rw"; then
@@ -359,7 +381,7 @@ jaildk_rc_mount() {
 }
 
 usage_install() {
-    die "Usage: $0 install <jail> [<mode>] [-r rc-function]
+    fin "Usage: $0 install <jail> [<mode>] [-r rc-function]
 Install <jail> according to its config. Options:
 <mode>          Mode can either be start, stop or status. default: start
 -r <function>   Only execute function with <mode> parameter. default: all.
@@ -379,7 +401,7 @@ jaildk_install() {
     base=''
     version=''
 
-    while getopts "r:wb:v:" arg; do
+    while getopts "r:b:v:w" arg; do
         case $arg in
             w) rw=1;;
             b) base=${OPTARG};;
@@ -435,14 +457,27 @@ jaildk_install() {
     done
 }
 
+usage_uninstall() {
+    fin "Usage: $0 uninstall <jail> [-w]
+Uninstall <jail>. Options:
+-w      Uninstall writable build chroot."
+}
+
 jaildk_uninstall() {
     # wrapper around _install
     jail=$1
-    rw=$2 # FIXME !!!!!!!!!! getopt !!!!!!!!!!
+    shift
+    rw=''
+
+    while getopts "w" arg; do
+        case $arg in
+            w) rw=1;;
+            *) usage_uninstall;;
+        esac
+    done
 
     if test -z "$jail"; then
-        err "Usage: $0 uninstall <jail> [<remove build>]"
-        exit 1
+        usage_uninstall
     fi
 
     die_if_not_exist $jail
@@ -456,7 +491,8 @@ jaildk_uninstall() {
 
 
 usage_base() {
-    die "Usage: $0 base -b <basename|basedir> [-w]
+    fin "Usage: $0 base -b <basename|basedir> [-w]
+Build a base directory from bsd install media. Options:
 -b <name>     <name> can be the name of a base (e.g. 12.2-RELEASE)
               or a directory where it shall be created
 -w            Create a writable base, including compiler and other
@@ -555,7 +591,7 @@ var/tmp"
         exit 1
     else
         ex mkdir -p $basedir
-        bsdinstall jail $basedir
+        bsdinstall jail $basedir || exit 1
 
         if test -z "$rw"; then
             # run base
@@ -606,7 +642,7 @@ clone() {
 }
 
 usage_clone() {
-    die "Usage: $0 clone -s <jail> -d <jail> [-o <version>] [-n <version>]
+    fin "Usage: $0 clone -s <jail> -d <jail> [-o <version>] [-n <version>]
 -s <jail>        Source jail to clone from
 -d <jail>        Destionation jail to create from source
 -o <version>     Old version
@@ -721,7 +757,8 @@ jaildk_clone() {
 }
 
 usage_create() {
-    die "Usage: $0 create <jail>"
+    fin "Usage: $0 create <jail>
+Create a new jail from template."
 }
 
 jaildk_create() {
@@ -751,12 +788,25 @@ remove() {
     fi
 }
 
+usage_remove() {
+    fin "Usage: $0 remove <jail> [-v <version>]
+Remove <jail> from disk."
+}
+
 jaildk_remove() {
     jail=$1
-    version=$2
+    shift
+    version=''
+
+    while getopts "v:" arg; do
+        case $arg in
+            v) version=${OPTARG};;
+            *) usage_remove;;
+        esac
+    done
 
     if test -z "$jail"; then
-        die "Usage: $0 remove <jail> [<version>]"
+        usage_remove
     fi
 
     if jls | egrep -q "${jail}"; then
@@ -789,19 +839,37 @@ jaildk_remove() {
 }
 
 jaildk_jail_usage() {
-    die "Usage: $0 <start|stop|restart|status> <jail> | status"
+    fin "Usage: $0 <start|stop|restart|status> <jail> | status"
+}
+
+usage_start() {
+    fin "Usage $0 start <jail>
+Start <jail>."
+}
+
+usage_stop() {
+    fin "Usage $0 stop <jail>
+Stop <jail>."
+}
+
+usage_restart() {
+    fin "Usage $0 restart <jail>
+Restart <jail>."
+}
+
+usage_status() {
+    fin "Usage $0 status [<jail>]
+Show status of <jail>. Without <jail>, show status of all jails."
 }
 
 
 jaildk_jail() {
-    mode=$1
     jail=$2
+    mode=$1
 
-    if test -z "$mode"; then
-        jaildk_jail_usage
-    fi
-
-    if test -z "$jail" -a $mode = "status"; then
+    if test -z "$jail"; then
+        usage_$mode
+    elif test -z "$jail" -a $mode = "status"; then
         bold "Running jails:"
         bold "   JID  IP Address      Hostname                      Path"
         jls | grep -v JID
@@ -817,8 +885,6 @@ jaildk_jail() {
         jls | grep -v JID | awk '{print $3}' | while read J; do
             jaildk_rc $J status
         done
-    elif test -z "$jail"; then
-        jaildk_jail_usage
     else
         bold "Jail $jail $mode:"
         case $mode in
@@ -846,35 +912,33 @@ get_rc_scripts() {
     done
 }
 
-jaildk_rc_usage() {
-    err "Usage: $0 rc <jail> {<rc-script> [<mode>]  |  <mode>}"
-    err "If <rc-script> is all, execute <mode> for every rc script"
-    err "<mode> must be a parameter of <rc-script>"
-    err "if only <mode> has been given, execute all scripts"
-    exit 1
+usage_rc() {
+    fin "Usage: $0 rc <jail> [<mode>] [-r <rc.d script]
+Execute an rc.d script inside <jail> with parameter <mode>. Options:
+-r <rc.d script>    Execute <rc.d script>. default: execute all enabled scripts."
 }
 
 jaildk_rc() {
     jail=$1
-    rc=$2
-    mode=$3
+    mode=$1
+    shift
+    shift
+    
+    rc=''
+
+    while getopts "r:" arg; do
+        case $arg in
+            r) rcd=${OPTARG};;
+            *) usage_rc;;
+        esac
+    done
 
     if test -z "$rc"; then
-        jaildk_rc_usage
+        rc='all'
     fi
 
-    if test -z "$mode"; then
-        # shift args
-        case $rc in
-            start|stop|restart|status)
-                # shift args
-                mode=$rc
-                rc=all
-                ;;
-            *)
-                jaildk_rc_usage
-                ;;
-        esac
+    if test -z "$jail" -o -z "$mode"; then
+        usage_rc
     fi
 
     if ! jls | egrep -q "${jail}"; then
@@ -903,6 +967,14 @@ jaildk_rc() {
     fi
 }
 
+usage_blogin() {
+    err "Usage: $file <jail>
+Chroot into a build jail.
+
+Mounted build chroot's:"
+    mount|egrep "base.*build" | awk '{print $3}' | cut -d/ -f 4
+    exit 1
+}
 
 jaildk_blogin() {
     jail=$1
@@ -914,10 +986,7 @@ jaildk_blogin() {
         else
             file="$0"
         fi
-        echo "Usage: $file <jail-name|jail-domain|jail-ip> [<user>]"
-        echo "mounted build jails:"
-        mount|egrep "base.*build" | awk '{print $3}' | cut -d/ -f 4
-        exit
+        usage_blogin
     fi
 
     chroot="$j/build/$jail"
@@ -941,6 +1010,16 @@ jaildk_blogin() {
     env - HOME=$home TERM=$term SHELL=$shell PATH=$path chroot $chroot $shell
 }
 
+usage_login() {
+    err "Usage: $file <jail-name|jail-domain|jail-ip> [<user>]
+Login into a jail by name, ip or domain. If <user> has not been
+specified, login as root. 
+
+Available jails:"
+    jls
+    exit 1
+}
+
 jaildk_login() {
     jail=$1
     user=$2
@@ -954,10 +1033,7 @@ jaildk_login() {
         else
             file="$0"
         fi
-        echo "Usage: $file <jail-name|jail-domain|jail-ip> [<user>]"
-        echo "available jails:"
-        jls
-        exit
+        usage_login
     fi
 
     jid=""
@@ -995,9 +1071,18 @@ jaildk_login() {
     env - JAIL=$jail HOME=$home TERM=$term SHELL=$shell PATH=$path $jexec -U $user $jid $shell
 }
 
+usage_reinstall() {
+    fin "Usage: $0 reinstall <jail>
+Stop, uninstall, install and start <jail>.
+"
+}
 
 jaildk_reinstall() {
     jail=$1
+
+    if test -z "$jail"; then
+        usage_reinstall
+    fi
 
     die_if_not_exist $jail
 
@@ -1023,7 +1108,7 @@ jaildk_setup() {
     j=$1
 
     if test -z "$j"; then
-        die "Usage: $0 setup <base dir for jail environment>"
+        fin "Usage: $0 setup <base dir for jail environment>"
     fi
 
     bold "preparing directories"
@@ -1295,7 +1380,7 @@ thaw_tarball() {
 }
 
 usage_thaw() {
-    die "Usage: $0 thaw <image>"
+    fin "Usage: $0 thaw <image>"
 }
 
 jaildk_thaw() {
@@ -1395,6 +1480,9 @@ case $runner in
         ;;
     setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch|freeze|thaw)
         jaildk_$runner $*
+        ;;
+    help)
+        usage_help $*
         ;;
     *)
         usage_jaildk $*
