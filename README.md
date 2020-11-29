@@ -197,7 +197,7 @@ fcgiwrap is running as pid 37682.
 
 ### Login into the running jail for administration
 ```
-# jaildk jlogin myjail
+# jaildk login myjail
 ```
 
 You can use this to login into a database or execute commands inside the jail.
