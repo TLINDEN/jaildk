@@ -52,7 +52,7 @@ Refer to [jail(8)](https://www.freebsd.org/cgi/man.cgi?query=jail&sektion=8) for
 
 Next add the following lines to your `/etc/rc.conf`:
 ```
-ifconfig_em0_alias0="inet 144.76.67.168/32"
+ifconfig_em0_alias0="inet 172.16.1.1/32"
 jail_enable="YES"
 ```
 
