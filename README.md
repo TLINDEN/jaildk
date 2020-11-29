@@ -37,7 +37,7 @@ Create the file `/etc/jail.conf` with the following innitial contents:
     sysvshm = "new";
     host.hostname = $name;
     path = "/jail/run/$name"; 
-    exec.prestart = "/jail/bin/jaildk install $name all start";
+    exec.prestart = "/jail/bin/jaildk install $name start";
     exec.clean = "true";
 }
 
@@ -135,7 +135,7 @@ A  normal base  directory cannot  be  used with  the ports  collection
 because  jaildk removes  libraries and  binaries for  security reasons
 from normal bases. To create a build base, execute:
 
-`jaildk base 12-RELEASE-build rw`
+`jaildk base -b 12-RELEASE-build -w`
 
 Next, add  the following entry  to the  configuration of you  jail. To
 stay with our example, edit `/jail/etc/myjail/jail.conf` and add:
@@ -209,22 +209,22 @@ The very first thing to do is to update the host system using `freebsd-update`.
 
 Next create a new base version:
 ```
-jaildk base `uname -r`
+jaildk base -b `uname -r`
 ```
 
 Now you can create clone of your jail with a new version:
 ```
-jaildk clone myjail myjail 20201106 20210422
+jaildk clone -s myjail -d myjail -o 20201106 -n 20210422
 ```
 
 Mount the build chroot for the new version:
 ```
-jaildk build myjail start `uname -r` 20210422
+jaildk build myjail start -b `uname -r` -v 20210422
 ```
 
 And finally chroot into the new jail and update it:
 ```
-blogin myjail
+jaildk blogin myjail
 pkg update
 ...
 ```
