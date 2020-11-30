@@ -1474,16 +1474,11 @@ jaildk_ipfw() {
         bold "Managing IPFW Rules..."
         case $mode in
             start)
-                # Deleting existing rules first to avoid duplicates.
-                ipfw show | grep -E "// $jail\$" | while read rule; do sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
-                # Getting current jails IP..
-                jailip=$(jls | grep -E "$jail\$" | awk '{print $2}')
-                # Adding rules
-                cat /jail/etc/revprx/ipfw.conf | awk -v jailname="$jail" '{print "ipfw add "$0" // " jailname}' | sed -E "s/\\\$ip/$jailip/g" | while read rule; do $rule; done
+                jaildk_ipfw_delete $jail "y"
+                jaildk_ipfw_add $jail
                 ;;
             stop)
-                # Deleting rules
-                ipfw show | grep -E "// $jail\$" | while read rule; do bold "Deleting rule $rule"; sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
+                jaildk_ipfw_delete $jail                
                 ;;
         esac
         bold "... done"
@@ -1491,6 +1486,22 @@ jaildk_ipfw() {
     fi
 }
 
+jaildk_ipfw_add() {
+    jail=$1
+    # Getting current jails IP..
+    jailip=$(jls | grep -E "$jail\$" | awk '{print $2}')
+    # Adding rules
+    cat $j/etc/$jail/ipfw.conf | awk -v jailname="$jail" '{print "ipfw add "$0" // " jailname}' | sed -E "s/\\\$ip/$jailip/g" | while read rule; do $rule; done
+        
+}
+
+jaildk_ipfw_delete() {
+    jail=$1
+    noout=$2
+    # Deleting rules
+    ipfw show | grep -E "// $jail\$" | while read rule; do [ -z "$2" ] && bold "Deleting rule $rule"; sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
+
+}
 
 ##########################
 #
