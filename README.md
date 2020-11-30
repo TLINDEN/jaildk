@@ -383,7 +383,7 @@ In order to control the inter-jail communication you have to delete this rule fi
 
 If an ipfw.conf exists for a jail (e.g. /jail/etc/myjail/ipfw.conf) the rules inside that config file are added when starting, and deleted when stopping the jail.
 E.g. allowing HTTP/HTTPS traffic for that jail (webserver): `allow tcp from any to $ip setup keep-state`
-As in the above rule demonstrated `$ip` is reserved and automatically replaced with the jails own ip (as reported by `jls`).
+As demonstrated in the previous rule `$ip` is reserved and automatically replaced with the jails own ip (as reported by `jls`).
 
 ## Getting help
 
