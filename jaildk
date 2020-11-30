@@ -715,7 +715,7 @@ jaildk_clone() {
         clone $j/data/$src/www   $j/data/$new/www
         clone $j/data/$src/spool $j/data/$new/spool
 
-        ex cp -pRp $j/etc/$src/mount.conf $j/etc/$src/ports.conf $j/etc/$src/mtree.conf $j/etc/$new/
+        ex cp -pRp $j/etc/$src/mount.conf $j/etc/$src/ports.conf $j/etc/$src/mtree.conf $j/etc/$src/ipfw.conf $j/etc/$new/
 
         echo "Creating $j/etc/$src/jail.conf"
         cat $j/etc/$src/jail.conf | egrep -v "^(name|version)=" >  $j/etc/$new/jail.conf
@@ -1164,6 +1164,9 @@ home/$name/root-$version       $name/root                          nullfs  rw' >
 
     bold "creating template config $j/etc/.template/ports.conf"
     (echo bash; echo ca_root_nss) > $j/etc/.template/ports.conf
+
+    bold "creating template config $j/etc/.template/ipfw.conf"
+    touch $j/etc/.template/ipfw.conf
 
     bold "creating template config $j/etc/.template/mtree.conf"
 #    touch $j/etc/.template/mtree.conf
