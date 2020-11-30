@@ -401,6 +401,7 @@ This software is licensed under the BSD license.
 ## Authors
 
 T.v.Dein <tom AT vondein DOT org>
+
 F.Sass (Culsu)
 
 ## Project homepage
