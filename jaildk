@@ -764,7 +764,7 @@ Create a new jail from template."
 
 jaildk_create() {
     jail=$1
-    # $jail gets overwritten in jaildk_clone or some subcall to .template :-( ...
+    # $jail gets overwritten in jaildk_clone or somewhere...
     newjail=$jail
     
     src=.template
@@ -782,7 +782,9 @@ jaildk_create() {
     jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
     # some perl magic to extract the hostname (if any) from /etc/jail.conf - and write it into the jails rc.conf
     jailhostname=$(cat /etc/jail.conf | tr -d '\t\r\n ' | perl -ne '$_ =~ /.*'"$newjail"'(\{(?:\{.*\}|[^{])*\})|\w+/; print $1;' | grep -oE 'hostname=[^;]+' | cut -d= -f2)
-    [ -n "$jailhostname" ] && sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
+    echo "new name: $jailhostname"
+    echo "in path $j/etc/$jail/local-etc-$newversion/rc.conf"
+    sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
     
     
 }
@@ -903,6 +905,7 @@ jaildk_jail() {
                 ;;
             *)
                 service jail $mode $jail
+                jaildk_ipfw $jail $mode
                 ;;
         esac
     fi
@@ -1458,6 +1461,31 @@ jaildk_thaw() {
     done
 
     bold "Done. Thawed jail $jail $version from $image."
+}
+
+jaildk_ipfw() {
+    jail=$1
+    mode=$2
+    if [ -f "$j/etc/$jail/ipfw.conf" ]; then
+        echo
+        bold "Managing IPFW Rules..."
+        case $mode in
+            start)
+                # Deleting existing rules first to avoid duplicates.
+                ipfw show | grep -E "// $jail\$" | while read rule; do sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
+                # Getting current jails IP..
+                jailip=$(jls | grep -E "$jail\$" | awk '{print $2}')
+                # Adding rules
+                cat /jail/etc/revprx/ipfw.conf | awk -v jailname="$jail" '{print "ipfw add "$0" // " jailname}' | sed -E "s/\\\$ip/$jailip/g" | while read rule; do $rule; done
+                ;;
+            stop)
+                # Deleting rules
+                ipfw show | grep -E "// $jail\$" | while read rule; do bold "Deleting rule $rule"; sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
+                ;;
+        esac
+        bold "... done"
+        echo
+    fi
 }
 
 
