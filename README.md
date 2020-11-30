@@ -153,8 +153,8 @@ Download the file `jaildk` or clone this repository to your FreeBSD server and e
 ./jaildk setup <directory>
 ```
 
-This will create the directory structure required for the tool install
-the tool itself, create a template jail and build a base directory.
+This will create the directory structure required for the tool itself,
+create a template jail and build a base directory.
 
 ## Basic usage
 
