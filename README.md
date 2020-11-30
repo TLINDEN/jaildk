@@ -41,20 +41,20 @@ As can be easily deduced this is a database jail with the following layers:
 2. **tmp layer**: Just a ramdisk for `/tmp`, the size can be tuned.
 3. **dev layer**: Contains /dev/null and friends, required by every jail.
 4. **log layer**:  Here  we  have our  first  versioned layer  for
-   `/var/log`. Notise how all other layers are using the same version,
+   `/var/log`. Notice how all other layers are using the same version,
    this  is done  by purpose  (but can  be changed  if you  like). The
    version is a jail variable (see  below) which is being used for all
    layers.
 5. **application  layer**: As  you know if  you're using  FreeBSD, any
    additional software,  wether installed from  a port or  as package,
    will be  installed to  `/usr/local`.  In our  case it  contains the
-   mysql  server  software,  bash  and  a  couple  of  supporting
+   mysql   server  software,   bash   and  a   couple  of   supporting
    utilities. It is being mounted read-only, so no new software can be
    installed in the running jail.  This might sound annoying at first,
-   because you can't  just install stuff inside the  jail anytime. But
-   it  forces you  to  work more  disciplined. Once  a  jail has  been
-   completely built  you can be  sure, all components match  with each
-   other. Read below how to install or update software in a jail.
+   because you  can't just install  stuff inside the jail  anytime you
+   like. But it  forces you to work more disciplined.  Once a jail has
+   been completely  built you can  be sure, all components  match with
+   each other. Read below how to install or update software in a jail.
 6. **/etc layer**: this just contains  the normal etc, it is basically
    a stripped copy of the host `/etc`.  We do not use it at all inside
    a  jail, but  it's required  nontheless. There  are some  exceptions
@@ -112,37 +112,38 @@ handy wrappers to make live easier.
 
 For an overview of the provided commands, here's the usage screen:
 ```
-Usage: jaildk <command> <mode-args>
+Usage: /usr/local/bin/jaildk <command> <mode-args>
 
 Building Jails:
-base      - build a new base
-build     - install a build chroot of a jail
-create    - create a new jail from a template
-clone     - clone an existing jail or jail version
-fetch     - fetch current port collection
+base -b <name> [-w]                              - build a new base
+build <jail> <mode> [-b <base>] [-v <version>]   - install a build chroot of a jail
+create                                           - create a new jail from a template
+clone -s <src> -d <dst> [-o <v>] [-n <v>]        - clone an existing jail or jail version
+fetch                                            - fetch current port collection
 
 Installing Jails:
-install   - install a jail (prepare mounts, devfs etc)
-uninstall - uninstall a jail
-remove    - remove a jail or a jail version
-reinstall - stop, remove, install and start a jail
+install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
+uninstall <jail> [-w]                            - uninstall a jail
+remove <jail>                                    - remove a jail or a jail version
+reinstall <jail>                                 - stop, remove, install and start a jail
 
 Maintaining Jails:
-start     - start a jail
-stop      - stop a jail
-restart   - restart a jail
-status    - display a jail's status
-rc        - execute an rc-script inside a jail
+start <jail>                                     - start a jail
+stop <jail>                                      - stop a jail
+restart <jail>                                   - restart a jail
+status [<jail>]                                  - display a jail's status
+rc <jail> <mode> [-r <rc.d script>]              - execute an rc-script inside a jail
 
 Managing Jails:
-login     - login into a jail (also available as separate command)
-blogin    - chroot into a build jail (dito)
+login <jail> [<user>]                            - login into a jail
+blogin <jail>                                    - chroot into a build jail
 
 Transferring Jails:
-freeze    - freeze (build an image of) a jail
-thaw      - thaw (install) an image of a jail somewhere else
+freeze <jail> [-a -b -v <version>]               - freeze (build an image of) a jail
+thaw <image>                                     - thaw (install) an image of a jail
 
-Run the <command> without arguments to get usage help about the command.
+Getting help:
+help <command>                                   - request help on <command>
 ```
 
 ## Installation
