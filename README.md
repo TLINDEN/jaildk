@@ -52,12 +52,12 @@ Refer to [jail(8)](https://www.freebsd.org/cgi/man.cgi?query=jail&sektion=8) for
 
 Next add the following lines to your `/etc/rc.conf`:
 ```
-ifconfig_em0_alias0="inet 144.76.67.168/32"
+ifconfig_em0_alias0="inet 172.16.1.1/32"
 jail_enable="YES"
 ```
 
 You may need to replace the interface name `em0` with the one in use on your system.
-
+You might need to restart the interface to apply the alias: `/etc/rc.d/netif restart`.
 
 ### Create the jail
 ```
@@ -197,7 +197,7 @@ fcgiwrap is running as pid 37682.
 
 ### Login into the running jail for administration
 ```
-# jaildk jlogin myjail
+# jaildk login myjail
 ```
 
 You can use this to login into a database or execute commands inside the jail.
