@@ -14,8 +14,8 @@ Most of the layers are mounted read-only for security reasons.
 Let's take a look at the layers of a typical running jail built with `jaildk`:
 ```
      1  /jail/base/12.1-RELEASE-p10      /jail/run/db                       read-only
-     2  /dev/md12                        /jail/run/db/tmp                   nosuid
-     3  devfs                            /jail/run/db/dev                   multilabel
+     2  /dev/md12                        /jail/run/db/tmp
+     3  devfs                            /jail/run/db/dev
      4  /jail/log/db-20201026            /jail/run/db/var/log
      5  /jail/appl/db-20201026           /jail/run/db/usr/local             read-only
      6  /jail/etc/db/etc-20201026        /jail/run/db/etc                   read-only
