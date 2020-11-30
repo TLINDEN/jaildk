@@ -148,7 +148,7 @@ help <command>                                   - request help on <command>
 
 ## Installation
 
-Execute the following command:
+Download the file `jaildk` or clone this repository to your FreeBSD server and execute the following command:
 ```
 ./jaildk setup <directory>
 ```
