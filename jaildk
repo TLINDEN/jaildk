@@ -764,7 +764,7 @@ Create a new jail from template."
 
 jaildk_create() {
     jail=$1
-    # $jail gets overwritten in jaildk_clone or somewhere...
+    # $jail gets overwritten in jaildk_clone or some subcall to .template :-( ...
     newjail=$jail
     
     src=.template
@@ -782,11 +782,11 @@ jaildk_create() {
     jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
     # some perl magic to extract the hostname (if any) from /etc/jail.conf - and write it into the jails rc.conf
     jailhostname=$(cat /etc/jail.conf | tr -d '\t\r\n ' | perl -ne '$_ =~ /.*'"$newjail"'(\{(?:\{.*\}|[^{])*\})|\w+/; print $1;' | grep -oE 'hostname=[^;]+' | cut -d= -f2)
-    echo "new name: $jailhostname"
-    echo "in path $j/etc/$jail/local-etc-$newversion/rc.conf"
-    sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
-    
-    
+    if [ -n "$jailhostname" ]; then
+        echo "new name: $jailhostname"
+        echo "in path $j/etc/$jail/local-etc-$newversion/rc.conf"
+        sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
+    fi     
 }
 
 remove() {
