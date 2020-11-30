@@ -5,7 +5,145 @@ used to build, update, manage and run jails in a versioned environment.
 
 Every jail  consists of layers of  directories mounted on top  of each
 other using  nullfs mounts. Some  of them  can be shared  among jails,
-some are versioned.
+some are versioned. By using shared  and versioned layers of mounts it
+is easy to update jails in a  new version while the current version is
+still running, you can switch back to an older version of a jail.
+
+Most of the layers are mounted read-only for security reasons.
+
+Let's take a look at the layers of a typical running jail built with `jaildk`:
+```
+     1  /jail/base/12.1-RELEASE-p10      /jail/run/db                       read-only
+     2  /dev/md12                        /jail/run/db/tmp                   nosuid
+     3  devfs                            /jail/run/db/dev                   multilabel
+     4  /jail/log/db-20201026            /jail/run/db/var/log
+     5  /jail/appl/db-20201026           /jail/run/db/usr/local             read-only
+     6  /jail/etc/db/etc-20201026        /jail/run/db/etc                   read-only
+     7  /jail/etc/db/local-etc-20201026  /jail/run/db/usr/local/etc         read-only
+     8  /jail/etc/db/cron-20201026       /jail/run/db/var/cron
+     9  /jail/home/db/root-20201026      /jail/run/db/root
+    10  /jail/data/db/mysql-20201026     /jail/run/db/usr/local/data/mysql
+    11  /backup/db                       /jail/run/db/var/backups
+                                                     |
+                                                     +--- root of the jail
+```
+
+As can be easily deduced this is a database jail with the following layers:
+
+1. **base layer**: This is basically the same as a FreeBSD base, which
+   contains all biinaries, libraries and  other files required to boot
+   up a FreeBSD system. Our base  doesn't contain a kernel by default,
+   but  you could  add one,  required  if you  want to  use the  ports
+   collection and  compile `lsof` yourself.<br/>
+   This  particular base  is  based on  12.1-RELEASE-p10,  that is,  I
+   created it  while I had this  release installed and running  on the
+   host system.
+2. **tmp layer**: Just a ramdisk for `/tmp`, the size can be tuned.
+3. **dev layer**: Contains /dev/null and friends, required by every jail.
+4. **log layer**:  Here  we  have our  first  versioned layer  for
+   `/var/log`. Notise how all other layers are using the same version,
+   this  is done  by purpose  (but can  be changed  if you  like). The
+   version is a jail variable (see  below) which is being used for all
+   layers.
+5. **application  layer**: As  you know if  you're using  FreeBSD, any
+   additional software,  wether installed from  a port or  as package,
+   will be  installed to  `/usr/local`.  In our  case it  contains the
+   mysql  server  software,  bash  and  a  couple  of  supporting
+   utilities. It is being mounted read-only, so no new software can be
+   installed in the running jail.  This might sound annoying at first,
+   because you can't  just install stuff inside the  jail anytime. But
+   it  forces you  to  work more  disciplined. Once  a  jail has  been
+   completely built  you can be  sure, all components match  with each
+   other. Read below how to install or update software in a jail.
+6. **/etc layer**: this just contains  the normal etc, it is basically
+   a stripped copy of the host `/etc`.  We do not use it at all inside
+   a  jail, but  it's required  nontheless. There  are some  exceptions
+   however, like `/etc/resolv.conf`.
+7. **/usr/local/etc layer**:  This  is the  place  we configure  all
+   aspects of the jail, all configs  reside here (like in our case the
+   mysql config). It  is also being mounted  read-only, just like
+   the etc layer.
+8. **cron layer**:  A writable mount for the crontabs  of users inside
+   the  jail.  That   way  one  can  modify   crontabs  with  `crontab
+   -e`. However, if you don't want or need this, just remove the layer
+   and add cronjobs to `/etc/crontab`.
+9. **/root layer**: most of the administrative work inside a jail must
+   be done  as the  root user and  it would  be a pity  not to  have a
+   writable  history. So,  `/root`  is mounted  writable  to add  more
+   comfort.
+10. **a data layer**: A versioned data layer which contains the binary
+    data of our mysql server. This  is very jail specific and you have
+    to add such layers yourself. Variants  of such a layer include the
+    document root of a webserver or the repositories of a git server.
+11.  **backup layer**:  Another  custom layer,  here  we've mounted  a
+    global backup directory of our host which contains all backups.
+    
+All layers  are configured  in a `mount.conf`  file specific  for each
+jail. The one for this jail looks like this:
+```
+base/$base                    $name                       nullfs  ro
+md                            $name/tmp                   mfs     rw,nosuid,async  500m 1777
+dev                           $name/dev                   devfs
+log/$name-$version            $name/var/log               nullfs  rw
+appl/db-$version              $name/usr/local             nullfs  ro
+etc/$name/etc-$version        $name/etc                   nullfs  ro
+etc/$name/local-etc-$version  $name/usr/local/etc         nullfs  ro
+etc/$name/cron-$version       $name/var/cron              nullfs  rw
+home/$name/root-$version      $name/root                  nullfs  rw
+data/$name/mysql-$version     $name/usr/local/data/mysql  nullfs  rw
+/backup/db                    $name/var/backups           nullfs  rw
+```
+
+Now, as you can see, we're  using variables here. Those are defined in
+the  `jail.conf` (not  to  be confused  with  `/etc/jail.conf` on  the
+host!):
+```
+name=db
+version=20201026
+base=12.1-RELEASE-p10
+```
+
+You might wonder  how the other aspects of a  jail are configured like
+ip  addresses, routing,  jail  parameters, sysctls  etc. Well,  that's
+beyond the  purpose of  `jaildk`.  You just  use the  standard FreeBSD
+mechanism for these things,  that is `/ect/rc.conf`, `/etc/jail.conf`,
+`service  jail ...`,  `jexec`,  etc. However,  `jaildk` provides  some
+handy wrappers to make live easier.
+
+For an overview of the provided commands, here's the usage screen:
+```
+Usage: jaildk <command> <mode-args>
+
+Building Jails:
+base      - build a new base
+build     - install a build chroot of a jail
+create    - create a new jail from a template
+clone     - clone an existing jail or jail version
+fetch     - fetch current port collection
+
+Installing Jails:
+install   - install a jail (prepare mounts, devfs etc)
+uninstall - uninstall a jail
+remove    - remove a jail or a jail version
+reinstall - stop, remove, install and start a jail
+
+Maintaining Jails:
+start     - start a jail
+stop      - stop a jail
+restart   - restart a jail
+status    - display a jail's status
+rc        - execute an rc-script inside a jail
+
+Managing Jails:
+login     - login into a jail (also available as separate command)
+blogin    - chroot into a build jail (dito)
+
+Transferring Jails:
+freeze    - freeze (build an image of) a jail
+thaw      - thaw (install) an image of a jail somewhere else
+
+Run the <command> without arguments to get usage help about the command.
+```
 
 ## Installation
 
@@ -250,6 +388,7 @@ This software is licensed under the BSD license.
 ## Authors
 
 T.v.Dein <tom AT vondein DOT org>
+F.Sass (Culsu)
 
 ## Project homepage
 
