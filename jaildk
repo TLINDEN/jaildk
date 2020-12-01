@@ -715,7 +715,7 @@ jaildk_clone() {
         clone $j/data/$src/www   $j/data/$new/www
         clone $j/data/$src/spool $j/data/$new/spool
 
-        ex cp -pRp $j/etc/$src/mount.conf $j/etc/$src/ports.conf $j/etc/$src/mtree.conf $j/etc/$new/
+        ex cp -pRp $j/etc/$src/mount.conf $j/etc/$src/ports.conf $j/etc/$src/mtree.conf $j/etc/$src/ipfw.conf $j/etc/$new/
 
         echo "Creating $j/etc/$src/jail.conf"
         cat $j/etc/$src/jail.conf | egrep -v "^(name|version)=" >  $j/etc/$new/jail.conf
@@ -782,9 +782,11 @@ jaildk_create() {
     jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
     # some perl magic to extract the hostname (if any) from /etc/jail.conf - and write it into the jails rc.conf
     jailhostname=$(cat /etc/jail.conf | tr -d '\t\r\n ' | perl -ne '$_ =~ /.*'"$newjail"'(\{(?:\{.*\}|[^{])*\})|\w+/; print $1;' | grep -oE 'hostname=[^;]+' | cut -d= -f2)
-    [ -n "$jailhostname" ] && sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
-    
-    
+    if [ -n "$jailhostname" ]; then
+        echo "new name: $jailhostname"
+        echo "in path $j/etc/$jail/local-etc-$newversion/rc.conf"
+        sed -iE 's/^hostname.*$/hostname="'"$jailhostname"'"/' $j/etc/$newjail/local-etc-$newversion/rc.conf
+    fi     
 }
 
 remove() {
@@ -903,6 +905,7 @@ jaildk_jail() {
                 ;;
             *)
                 service jail $mode $jail
+                jaildk_ipfw $jail $mode
                 ;;
         esac
     fi
@@ -1161,6 +1164,9 @@ home/$name/root-$version       $name/root                          nullfs  rw' >
 
     bold "creating template config $j/etc/.template/ports.conf"
     (echo bash; echo ca_root_nss) > $j/etc/.template/ports.conf
+
+    bold "creating template config $j/etc/.template/ipfw.conf"
+    touch $j/etc/.template/ipfw.conf
 
     bold "creating template config $j/etc/.template/mtree.conf"
 #    touch $j/etc/.template/mtree.conf
@@ -1460,6 +1466,42 @@ jaildk_thaw() {
     bold "Done. Thawed jail $jail $version from $image."
 }
 
+jaildk_ipfw() {
+    jail=$1
+    mode=$2
+    if [ -f "$j/etc/$jail/ipfw.conf" ]; then
+        echo
+        bold "Managing IPFW Rules..."
+        case $mode in
+            start)
+                jaildk_ipfw_delete $jail "y"
+                jaildk_ipfw_add $jail
+                ;;
+            stop)
+                jaildk_ipfw_delete $jail                
+                ;;
+        esac
+        bold "... done"
+        echo
+    fi
+}
+
+jaildk_ipfw_add() {
+    jail=$1
+    # Getting current jails IP..
+    jailip=$(jls | grep -E "$jail\$" | awk '{print $2}')
+    # Adding rules
+    cat $j/etc/$jail/ipfw.conf | awk -v jailname="$jail" '{print "ipfw add "$0" // " jailname}' | sed -E "s/\\\$ip/$jailip/g" | while read rule; do $rule; done
+        
+}
+
+jaildk_ipfw_delete() {
+    jail=$1
+    noout=$2
+    # Deleting rules
+    ipfw show | grep -E "// $jail\$" | while read rule; do [ -z "$2" ] && bold "Deleting rule $rule"; sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
+
+}
 
 ##########################
 #

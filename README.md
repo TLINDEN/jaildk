@@ -372,6 +372,18 @@ The last step is to remove the current running jail, change the version in `etc/
 
 If there's anything wrong you can always go back to the previous version using the above steps.
 
+## Advanced Features
+Jaildk also offers some advanced features like automatically setting up and deleting ipfw rules or freezing and thawing a jail (to make it easily portable).
+### Using the IPFW
+To use the IPFW on your host you first have to enable ipfw in your hosts rc.conf `firewall_enable="YES"`.
+You probably want to set the default firewalling-type there aswell, check out the [FreeBSD handbook](https://www.freebsd.org/doc/handbook/firewalls-ipfw.html) for further information. 
+Once enabled you also need to start ipfw by executing the rc script: `/etc/rc.d/ipfw start`.
+Be aware that inter-jail communication is transfered via the loopback interface (normally lo0) for which there is a high priority allow any to any rule by default: `allow ip from any to any via lo`
+In order to control the inter-jail communication you have to delete this rule first.
+
+If an ipfw.conf exists for a jail (e.g. /jail/etc/myjail/ipfw.conf) the rules inside that config file are added when starting, and deleted when stopping the jail.
+E.g. allowing HTTP/HTTPS traffic for that jail (webserver): `allow tcp from any to $ip setup keep-state`
+As demonstrated in the previous rule `$ip` is reserved and automatically replaced with the jails own ip (as reported by `jls`).
 
 ## Getting help
 
@@ -389,6 +401,7 @@ This software is licensed under the BSD license.
 ## Authors
 
 T.v.Dein <tom AT vondein DOT org>
+
 F.Sass (Culsu)
 
 ## Project homepage
