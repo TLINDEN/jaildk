@@ -29,6 +29,7 @@ stop <jail>                                      - stop a jail
 restart <jail>                                   - restart a jail
 status [<jail>]                                  - display a jail's status
 rc <jail> <mode> [-r <rc.d script>]              - execute an rc-script inside a jail
+ipfw <jail> <mode>                               - add or remove ipfw rules
 
 ${beg}Managing Jails:${end}
 login <jail> [<user>]                            - login into a jail
@@ -379,6 +380,8 @@ jaildk_rc_mount() {
         esac
     done
 }
+
+
 
 usage_install() {
     fin "Usage: $0 install <jail> [<mode>] [-r rc-function]
@@ -1169,7 +1172,6 @@ home/$name/root-$version       $name/root                          nullfs  rw' >
     touch $j/etc/.template/ipfw.conf
 
     bold "creating template config $j/etc/.template/mtree.conf"
-#    touch $j/etc/.template/mtree.conf
     echo '/set type=dir uid=0 gid=0 mode=01777
 .       type=dir mode=0755
 tmp
@@ -1466,10 +1468,24 @@ jaildk_thaw() {
     bold "Done. Thawed jail $jail $version from $image."
 }
 
+usage_ipfw() {
+    echo "Usage: $0 ipfw <jail> <mode>
+[Un]install ipfw rules. <mode> can be start or stop.
+The jail needs to have a ipfw.conf file, containing
+ipfw rules. You can use variables like \$ip and \$ip6
+and you need to omit the 'ipfw add' of the command."
+    exit 1
+}
+
 jaildk_ipfw() {
     jail=$1
     mode=$2
-    if [ -f "$j/etc/$jail/ipfw.conf" ]; then
+
+    if test -z "$mode"; then
+        usage_ipfw
+    fi
+
+    if test -f "$j/etc/$jail/ipfw.conf"; then
         echo
         bold "Managing IPFW Rules..."
         case $mode in
@@ -1488,11 +1504,24 @@ jaildk_ipfw() {
 
 jaildk_ipfw_add() {
     jail=$1
+
+    # support jail variables as well
+    load-jail-config $jail
+    
     # Getting current jails IP..
-    jailip=$(jls | grep -E "$jail\$" | awk '{print $2}')
+    ip=`jls -n -j $jail ip4.addr | cut -d= -f2`
+    if test -z "$ip"; then
+        die "Jail $jail doesn't have an ipv4 address!"
+    fi
+
+    ip6=`jls -n -j $jail ip6.addr | cut -d= -f2` # optional, no checks
+    
     # Adding rules
-    cat $j/etc/$jail/ipfw.conf | awk -v jailname="$jail" '{print "ipfw add "$0" // " jailname}' | sed -E "s/\\\$ip/$jailip/g" | while read rule; do $rule; done
-        
+    egrep "^[a-z]" $j/etc/$jail/ipfw.conf | while read LINE; do
+        rule=$(eval echo "ipfw add $LINE // $jail")
+        echo $rule
+        $rule
+    done
 }
 
 jaildk_ipfw_delete() {
@@ -1529,7 +1558,7 @@ case $runner in
     start|stop|status|restart)
         jaildk_jail $runner $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch|freeze|thaw)
+    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch|freeze|thaw|ipfw)
         jaildk_$runner $*
         ;;
     help)
