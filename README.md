@@ -499,7 +499,7 @@ pass in quick on $ext inet6 proto tcp from any to $me6 port $loginports \
 
 Install the ruleset with `service pf start`.
 
-Now that everything is prepared you can create a pf.conf file for your
+Now that everything is prepared you can create a `/jail/etc/myjail/pf.conf` file for your
 jail. Here's an  example I use for a webserver  jail, which includes a
 git server:
 ```shell
