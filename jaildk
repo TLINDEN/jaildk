@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.08
+version=1.09
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -119,6 +119,58 @@ die_if_not_exist() {
     fi
 }
 
+parse_jail_conf() {
+    #
+    # just  in  case  we  want  or have  to  fetch  variables  out  of
+    # /etc/jail.conf, this is the way to go. Call it like this:
+    #
+    # ip=`parse_jail_conf $jail ip4.addr`
+    #
+    # Output may be  empty, so check before  using. Multiple variables
+    # of the same  type (like multiple ip addresses)  will be returned
+    # comma separated.
+    jail=$1
+    search=$2
+    JAIL=''
+    list=''
+
+    # fetch 20 lines after "^$jail {", ignore comments
+    egrep -A20 "^$jail" jail.conf | egrep -v "^ *#" | \
+        # turn each line into an evaluable shell expression \
+        sed -e 's/ *{//g' -e 's/}//g' -e 's/ *= */=/g' -e 's/;$//' | \
+        # ignore empty lines \
+        egrep -v '^$' | while read LINE; do
+        if echo "$LINE" | egrep -q "="; then
+            case $JAIL in
+                $jail)
+                    var=`echo "$LINE" | cut -d= -f1`
+                    opt=`echo "$LINE" | cut -d= -f2 | sed -e 's/^"//' -e 's/"$//'`
+                    case $var in
+                        $search)
+                            if test -z "$list"; then
+                                list="$opt"
+                            else
+                                list="$list,$opt"
+                            fi
+                            ;;
+                    esac
+                    ;;
+                *)
+                    echo $list
+                    return
+                    ;;
+            esac
+        else
+            case $LINE in
+                \*) JAIL=any;;
+                *)  JAIL="$LINE";;
+            esac
+        fi
+    done
+}
+
+
+
 usage_build() {
     fin "Usage: $0 build <jail> [<start|stop|status>] [-b <base>] [-v <version>]
 Mount <jail> to $j/build read-writable for maintenance. Options:
@@ -169,6 +221,33 @@ jaildk_build() {
             ex mkdir -p $j/build/$jail/usr/local/db
             ;;
     esac
+}
+
+jaildk_rc_pf() {
+    jail=$1
+    mode=$2
+    conf=$j/etc/$jail/pf.conf
+    
+    # FIXME:  maybe we  use parse_jail_conf()  to fetch  ip addresses,
+    # generate  a config  file containing  pf macros,  which the  user
+    # needs  to include  in  the  jails pf.conf?  On  the other  hand,
+    # there's not that much duplication in the config. So, maybe not.
+    if test -f $conf; then
+        case $mode in
+            start)
+                bold "Installing PF rules for jail $jail:"
+                pfctl -a /jail/$jail -f $conf -v
+                ;;
+            status)
+                bold "PF rules for jail $jail:"
+                pfctl -a /jail/$jail -s rules -v
+                ;;
+            stop)
+                bold "Removing PF rules for jail $jail:"
+                pfctl -a /jail/$jail -f $conf -v -F all
+                ;;
+        esac
+    fi
 }
 
 jaildk_rc_mtree() {
@@ -1540,8 +1619,8 @@ jaildk_ipfw_delete() {
 JAILDIR=/jail
 
 # install modules
-RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree"
-RCSCRIPTS_STOP="jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
+RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree jaildk_rc_pf"
+RCSCRIPTS_STOP="jaildk_rc_pf jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
 
 # globals
 j=$JAILDIR

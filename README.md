@@ -418,6 +418,132 @@ which uses custom ipfw rules:
 
 `exec.prestart = "/jail/bin/jaildk ipfw $name"`
 
+Be aware, that  the ipfw module will  only be executed if  the jail is
+running so  that we  can properly  determine the  ip addresses  of the
+running jail. **Note**: this might change in the future.
+
+### Using pf
+
+Beside                ipfw,               Free                supports
+[pf](https://www.freebsd.org/doc/de_DE.ISO8859-1/books/handbook/firewalls-pf.html)
+as well.  You  can use pf with `jaildk`.  Unlike  the ipfw module (see
+above) it is a normal `install` module. That is it can be installed or
+reloaded before the jail is running (i.e. like the mount module).
+
+In order to use `pf` with a jail, enable and configure it according to
+the  FreeBSD  handbook linked  above.  It  is recommended  to  include
+general block, scrup, state rules,  communication to and fro localhost
+etc and just leave everything which is related to your jail.
+
+Just so that you know how such a global `/etc/pf.conf` file might look
+like, here's a simple one:
+```shell
+# variables
+ext        = "em0"
+me         = "your ipv4 address here"
+me5        = "your ipv6 address here/64"
+loginports = "{ 22, 5222, 443 }"
+icmp_types = "echoreq"
+
+# tables. look at the contents of a table:
+#    pfctl -t bad_hosts -T show
+# remove an entry from a table:
+#    pfctl -t bad_hosts -T delete $ip
+table <bad_hosts> persist
+
+# default policy
+set block-policy drop
+
+# optimize according to rfc's
+set optimization aggressive
+
+# normalisation
+scrub in all
+antispoof for $ext
+
+# allow localhost
+pass quick on $local
+
+# additional default block rules w/ logging. to view the log:
+#    tcpdump -n -e -ttt -r /var/log/pflog
+# to view live log:
+#    tcpdump -n -e -ttt -i pflog0
+block in log on $ext
+block in log on $ext inet6
+
+# whoever makes it into those tables: you loose
+block quick from <bad_hosts>
+
+# allow outgoing established sessions
+pass out keep state
+pass out inet6 keep state
+
+# allow troubleshooting
+pass in on $ext inet proto icmp all icmp-type $icmp_types keep state
+pass in on $ext inet proto udp from any to any port 33433 >< 33626 keep state
+
+# allow all icmpv6
+pass in quick inet6 proto icmp6 all keep state
+
+# allow login but punish offenders
+block quick from <bad*hosts>
+pass in quick on $ext inet proto tcp from any to $me port $loginports \
+     flags S/SAFR keep state \
+     (max-src-conn-rate 10/60, \
+      overload <bad*hosts> flush global) label ServicesTCP
+pass in quick on $ext inet6 proto tcp from any to $me6 port $loginports \
+     flags S/SAFR keep state \
+     (max-src-conn-rate 10/60, \
+     overload <bad_hosts> flush global) label ServicesTCP
+```
+
+Install the ruleset with `service pf start`.
+
+Now that everything is prepared you can create a pf.conf file for your
+jail. Here's an  example I use for a webserver  jail, which includes a
+git server:
+```shell
+ip         = "jail ip4 addr"
+ip6        = "jail ip6 addr"
+loginports = "{ 22 }"
+prodports  = "{ 80, 443 }"
+ext        = "em0"
+
+# dynamic block list
+table <blocked>
+
+# restrict foreigners
+block quick from <blocked>
+pass in quick on $ext inet proto tcp from any to $ip port $loginports \
+     flags S/SAFR keep state \
+     (max-src-conn-rate 10/60, \
+      overload <blocked> flush global) label ServicesTCP
+
+# allow production traffic v4
+pass in quick on $ext proto tcp from any to $ip port $prodports keep state
+
+# allow production traffic v6
+pass in quick inet6 proto tcp from any to $ip6 port $prodports keep state
+```
+
+That's it already. Now install the jail as usual. You can also install
+the pf ruleset for the jail separately:
+
+`jaildk install myjail start -r pf`
+
+To take look at the rules, execute:
+
+`jaildk install myjail status -r pf`
+
+You can of  course manipulate the ruleset  manually. `jaildk` installs
+rulesets  into  a jail  specific  anchor  using the  following  naming
+scheme: `/jail/<jail name>`. So, for example to view the rules, execute:
+
+`pfctl  -a /jail/myjail -s rules`
+
+Manipulate a jail specific table:
+
+`pfctl  -a /jail/myjail -t blocked -T show`
 
 ## Getting help
 
