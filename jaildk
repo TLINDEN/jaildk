@@ -15,7 +15,7 @@ base -b <name> [-w]                              - build a new base
 build <jail> <mode> [-b <base>] [-v <version>]   - install a build chroot of a jail
 create                                           - create a new jail from a template
 clone -s <src> -d <dst> [-o <v>] [-n <v>]        - clone an existing jail or jail version
-fetch                                            - fetch current port collection
+fetchports [-v <version>]                        - fetch current port collection
 
 ${beg}Installing Jails:${end}
 install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
@@ -320,8 +320,13 @@ jaildk_rc_ports() {
 
     load-jail-config $jail
 
-    if test -n "$ports"; then
-        version="$ports"
+    if test -z "$ports"; then
+        # ports not configured, abort
+        return
+    fi
+
+    if ! test -d "$j/ports/$VERSION"; then
+        die "Ports tree $j/ports/$VERSION doesn't exist yet. Consider creating it with 'jaildk fetchports [-v <version>]'"
     fi
 
     if test -n "$buildbase" -a -n "$rw"; then
@@ -705,7 +710,7 @@ var/tmp"
             read yesno
             case $yesno in
                 y|Y|yes|YES)
-                    jaildk_fetch
+                    jaildk_fetchports
                     ;;
             esac
         fi
@@ -1316,8 +1321,21 @@ endif
     esac
 }
 
-jaildk_fetch() {
+usage_fetchports() {
+    die "Usage $0 fetchports [-v <version>]
+Fetch current portscollection, use <version> or todays timestamp as new version"
+}
+
+jaildk_fetchports() {
     version=`date +%Y%m%d`
+
+    while getopts "v:" arg; do
+        case $arg in
+            v) version=${OPTARG};;
+            *) usage_fetchports;;
+        esac
+    done
+
     if test -d "$j/ports/$version"; then
         echo -n "Ports dir $version already exist. Do you want to recreate it [y/N]? "
         read yesno
@@ -1641,7 +1659,7 @@ case $runner in
     start|stop|status|restart)
         jaildk_jail $runner $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetch|freeze|thaw|ipfw)
+    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetchports|freeze|thaw|ipfw)
         jaildk_$runner $*
         ;;
     help)
