@@ -523,10 +523,17 @@ jaildk_install() {
     die_if_not_exist $jail
 
     if test "$rcd" = "all"; then
-        case $mode in
-            start) rcscripts="$RCSCRIPTS_START";;
-            stop)  rcscripts="$RCSCRIPTS_STOP";;
-        esac
+        if test -n "$rw"; then
+            case $mode in
+                start) rcscripts="$RW_RCSCRIPTS_START";;
+                stop)  rcscripts="$RW_RCSCRIPTS_STOP";;
+            esac
+        else
+            case $mode in
+                start) rcscripts="$RCSCRIPTS_START";;
+                stop)  rcscripts="$RCSCRIPTS_STOP";;
+            esac
+        fi
     else
         rcscripts="jaildk_rc_${rcd}"
         if ! type "$rcscripts" > /dev/null 2>&1; then
@@ -1643,6 +1650,8 @@ JAILDIR=/jail
 # install modules
 RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree jaildk_rc_pf"
 RCSCRIPTS_STOP="jaildk_rc_pf jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
+RWRCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree"
+RWRCSCRIPTS_STOP="jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
 
 # globals
 j=$JAILDIR
