@@ -5,8 +5,11 @@
 parse() {
     file=$1
 
-    egrep -v '^ *#|^$' $file \
-    | awk '/^[a-zA-Z0-9\*]/ {
+    cat $file \
+    | awk '
+          /^\s*#/ {} # ignore comments and empty lines
+          /^\s*$/ {}
+          /^[a-zA-Z0-9\*]/ {
               # extract the jail name
               gsub(/\s*\{/, "");     # remove trailing parenthesis
               gsub(/\*/, "any");     # rename *
@@ -26,7 +29,7 @@ parse() {
               split($0, pair, /=/);
               key = pair[1];
               value = pair[2];
-              
+
               # store into arrays
               if(jail == "any") {
                  any[key] = value;
@@ -41,16 +44,24 @@ parse() {
               for (jail in j) {
                  for (key in j[jail]) {
                     gsub(/\$name/, jail, j[jail][key])
-                    printf "s_%s=%s\n", jail, key, j[jail][key]
+                    printf "%s_%s=%s;\n", jail, key, j[jail][key]
                  }
                  for (anykey in any) {
                     if (! (jail, anykey) in j) {
                        gsub(/\$name/, jail, any[anykey])
-                       printf "%s_%s=%s\n", jail, anykey, any[anykey]
+                       printf "%s_%s=%s;\n", jail, anykey, any[anykey]
                     }
                  }
               }
           }'
 }
 
-parse $1
+parseconfig() {
+    code=`parse $1`
+    eval $code
+}
+
+parseconfig $1
+
+echo "<${scippub_ip4_addr}>"
+
