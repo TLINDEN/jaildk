@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.09
+version=1.10
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -960,9 +960,7 @@ jaildk_jail() {
     jail=$2
     mode=$1
 
-    if test -z "$jail"; then
-        usage_$mode
-    elif test -z "$jail" -a $mode = "status"; then
+    if test -z "$jail" -a $mode = "status"; then
         bold "Running jails:"
         bold "   JID  IP Address      Hostname                      Path"
         jls | grep -v JID
@@ -978,6 +976,8 @@ jaildk_jail() {
         jls | grep -v JID | awk '{print $3}' | while read J; do
             jaildk_rc $J status
         done
+    elif test -z "$jail"; then
+        usage_$mode
     else
         bold "Jail $jail $mode:"
         case $mode in
@@ -1014,7 +1014,7 @@ Execute an rc.d script inside <jail> with parameter <mode>. Options:
 
 jaildk_rc() {
     jail=$1
-    mode=$1
+    mode=$2
     shift
     shift
     
