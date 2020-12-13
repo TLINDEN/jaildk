@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.10
+version=1.11
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -195,6 +195,10 @@ jaildk_build() {
             *) usage_build;;
         esac
     done
+
+    if test -z "$jail"; then
+        usage_build
+    fi
 
     if test -z "$mode"; then
         mode=start
