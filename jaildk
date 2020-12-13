@@ -185,12 +185,12 @@ jaildk_build() {
     shift
     shift
     
-    base=''
+    BASE=''
     VERSION=''
 
     while getopts "b:v:" arg; do
         case $arg in
-            b) base=${OPTARG};;
+            b) BASE=${OPTARG};;
             v) VERSION=${OPTARG};;
             *) usage_build;;
         esac
@@ -211,6 +211,11 @@ jaildk_build() {
     if test -n "$VERSION"; then
         # overridden with -v
         version=$VERSION
+    fi
+
+    if test -n "$BASE"; then
+        # dito
+        base=$BASE
     fi
 
     if test -n "$buildbase"; then
