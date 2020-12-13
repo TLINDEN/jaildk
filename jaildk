@@ -186,12 +186,12 @@ jaildk_build() {
     shift
     
     base=''
-    version=''
+    VERSION=''
 
     while getopts "b:v:" arg; do
         case $arg in
             b) base=${OPTARG};;
-            v) version=${OPTARG};;
+            v) VERSION=${OPTARG};;
             *) usage_build;;
         esac
     done
@@ -204,9 +204,14 @@ jaildk_build() {
         mode=start
     fi
 
-    die_if_not_exist $jail $version
+    die_if_not_exist $jail $VERSION
 
     load-jail-config $jail
+
+    if test -n "$VERSION"; then
+        # overridden with -v
+        version=$VERSION
+    fi
 
     if test -n "$buildbase"; then
         base="$buildbase"
