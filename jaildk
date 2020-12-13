@@ -102,7 +102,7 @@ load-jail-config() {
 die_if_not_exist() {
     jail=$1
     which=$2
-    VERSION=$3
+    jailversion=$3
 
     if test -z "$which"; then
         which="Jail"
@@ -112,9 +112,9 @@ die_if_not_exist() {
         die "$which $jail doesn't exist!"
     fi
 
-    if test -n "$VERSION"; then
-        if ! test -d $j/etc/$jail/etc-$VERSION; then
-            die "$which $jail $version doesn't exist!"
+    if test -n "$jailversion"; then
+        if ! test -d $j/etc/$jail/etc-$jailversion; then
+            die "$which $jail $jailversion doesn't exist!"
         fi
     fi
 }
