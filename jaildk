@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.12
+version=1.13
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -21,7 +21,8 @@ ${beg}Installing Jails:${end}
 install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
 uninstall <jail> [-w]                            - uninstall a jail
 remove <jail>                                    - remove a jail or a jail version
-reinstall <jail>                                 - stop, remove, install and start a jail
+reinstall <jail> [-b <base>] [-v <version>]      - stop, remove, install and start a jail, if
+                                                   -b and/or -v is set, update the jail config
 
 ${beg}Maintaining Jails:${end}
 start <jail>                                     - start a jail
@@ -1219,13 +1220,26 @@ jaildk_login() {
 }
 
 usage_reinstall() {
-    fin "Usage: $0 reinstall <jail>
-Stop, uninstall, install and start <jail>.
+    fin "Usage: $0 reinstall <jail> [-b <base>] [-v <version>]
+Stop, uninstall, install and start <jail>. If <base> and/or
+<version> is given, modify the jail config before reinstalling.
 "
 }
 
 jaildk_reinstall() {
     jail=$1
+    shift
+
+    NEWBASE=''
+    NEWVERSION=''
+
+    while getopts "b:v:" arg; do
+        case $arg in
+            b) NEWBASE=${OPTARG};;
+            v) NEWVERSION=${OPTARG};;
+            *) usage_reinstall;;
+        esac
+    done
 
     if test -z "$jail"; then
         usage_reinstall
@@ -1241,6 +1255,31 @@ jaildk_reinstall() {
 
     sleep 0.2
     sync
+
+    if test -n "$NEWBASE" -o -n "$NEWVERSION"; then
+        load-jail-config $jail
+        ts=`date +%Y%m%d%H%M`
+        change=''
+        if test $NEWBASE != $base; then
+            base=$NEWBASE
+            change=1
+        fi
+
+        if test $NEWVERSION != $version; then
+            version=$NEWVERSION
+            change=1
+        fi
+
+        if test -n "$change"; then
+            bold "Saving current $jail config"
+            ex cp -p $j/etc/$jail/jail.conf $j/etc/$jail/jail.conf-$ts
+
+            bold "Creating new $jail config"
+            cat $j/etc/$jail/jail.conf-$ts \
+                | sed -e "s/^base=.*/base=$base/" -e "s/^version=.*/version=$version/" \
+                > $j/etc/$jail/jail.conf
+        fi
+    fi
 
     jaildk_install $jail start
     jaildk_jail start $jail

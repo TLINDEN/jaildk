@@ -350,8 +350,9 @@ Next create a new base version:
 ```
 jaildk base -b `uname -r`
 ```
+But of course you can update a jail with the current base as well.
 
-Now you can create clone of your jail with a new version:
+Now you can clone of your jail with a new version:
 ```
 jaildk clone -s myjail -d myjail -o 20201106 -n 20210422
 ```
@@ -368,9 +369,20 @@ pkg update
 ...
 ```
 
-The last step is to remove the current running jail, change the version in `etc/myjail.conf`, install and start the new version.
+The  last step  is  to remove  the current  running  jail, change  the
+version in `etc/myjail.conf`, install and  start the new version. This
+can be easily done with the following command:
+```
+jaildk reinstall myjail -b `uname -r` -v 20210422
+```
 
-If there's anything wrong you can always go back to the previous version using the above steps.
+This command also creates a copy of the current jail.conf.
+
+If  there's anything  wrong you  can always  go back  to the  previous
+version using the following command (using the previous base and version):
+```
+jaildk reinstall myjail -b 12.2-RELEASE-p1 -v 20201106
+```
 
 ## Advanced Features
 
