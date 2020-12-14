@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.11
+version=1.12
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -743,7 +743,11 @@ clone() {
             mkdir -p $dstdir
         fi
 
-        ex cpdup -x $srcdir $dstdir
+        if test $srcdir = $dstdir; then
+            echo "$srcdir == $dstdir, ignored"
+        else
+            ex cpdup -x $srcdir $dstdir
+        fi
     else
         echo "$srcdir doesn't exist, ignored"
     fi
@@ -795,35 +799,58 @@ jaildk_clone() {
             die "new version must be different from source version!"
         fi
         update=1
-    else
-        # clone from A to B
-        die_if_not_exist $src "Source jail"
-
-        if test -z "$srcversion"; then
-            . $j/etc/$src/jail.conf
-            srcversion=$version
-            newversion=$version
-        else
-            if ! test -d $j/etc/$src/etc-$srcversion; then
-                die "Version $srcversion of source jail $src doesn't exist!"
-            else
-                if test -z "$newversion"; then
-                    newversion=$srcversion
-                fi
-            fi
-        fi
     fi
 
-    clone $j/log/$src-$srcversion            $j/log/$new-$newversion
-    clone $j/home/$src/root-$srcversion      $j/home/$new/root-$newversion
-    clone $j/etc/$src/etc-$srcversion        $j/etc/$new/etc-$newversion
-    clone $j/etc/$src/local-etc-$srcversion  $j/etc/$new/local-etc-$newversion
+    die_if_not_exist $src "Source jail"
+    load-jail-config $jail
+
+    if test -z "$srcversion"; then
+        srcversion=$version
+    fi
+
+    if test -z "$newversion"; then
+        newversion=$version
+    fi
+
+    if ! test -d $j/etc/$src/etc-$srcversion; then
+        die "Version $srcversion of source jail $src doesn't exist!"
+    fi
+
+    if test -e "$j/etc/$src/mount.conf"; then
+        grep -v "#" $j/etc/$src/mount.conf | while read srcmount dstmount fs opts size perm; do
+            # we are  not automatically interpolating  variables here,
+            # because it's much more easier to replace \$name with the
+            # jail name than an already  resolved $name which might be
+            # part of the  path and cause confusion what  to clone and
+            # what not.
+            if test -z "$srcmount"; then
+                continue
+            fi
+
+            cloneto=$(echo "$srcmount" | sed -e "s/\$version/$newversion/g" -e "s/\$name/$new/g")
+            clonefrom=$(echo "$srcmount" | sed -e "s/\$version/$srcversion/g" -e "s/\$name/$src/g")
+
+            case $fs in
+                nullfs)
+                    if ! echo "$srcmount" | egrep -q "^/"; then
+                        # only clone mounts relative  to $j, which are
+                        # either versioned  or have the src  jail name
+                        # in it
+                        if echo "$srcmount" | egrep -q '\$version|\$name'; then
+                            # srcversion versioned nullfs mount at $j/
+                            clone $j/$clonefrom $j/$cloneto
+                        fi
+                    fi
+                    ;;
+            esac
+        done
+    else
+        die "Error: $j/etc/$src/mount.conf doesn't exist, cannot clone!"
+    fi
 
     if test -z "$update"; then
-        clone $j/data/$src/www   $j/data/$new/www
-        clone $j/data/$src/spool $j/data/$new/spool
-
-        ex cp -pRp $j/etc/$src/mount.conf $j/etc/$src/ports.conf $j/etc/$src/mtree.conf $j/etc/$src/ipfw.conf $j/etc/$new/
+        echo "Copying configs"
+        ex cp -pRp $j/etc/$src/*.conf $j/etc/$new/
 
         echo "Creating $j/etc/$src/jail.conf"
         cat $j/etc/$src/jail.conf | egrep -v "^(name|version)=" >  $j/etc/$new/jail.conf
@@ -861,7 +888,7 @@ jaildk_clone() {
         . $j/etc/$src/jail.conf
         jail=$new
         bold "To mount the build chroot of the new jail, execute:"
-        echo "jaildk build $new start $base $newversion"
+        echo "jaildk build $new start -b $base -v $newversion"
     fi
 }
 
