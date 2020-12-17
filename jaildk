@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.13
+version=1.14
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -259,7 +259,11 @@ jaildk_rc_pf() {
                 ;;
             stop)
                 bold "Removing PF rules for jail $jail:"
-                pfctl -a /jail/$jail -f $conf -v -F all
+                pfctl -a /jail/$jail -v -F all
+                ;;
+            restart)
+                jaildk_rc_pf $jail stop
+                jaildk_rc_pf $jail start
                 ;;
         esac
     fi
