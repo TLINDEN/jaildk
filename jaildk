@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.14
+version=1.15
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -1076,7 +1076,7 @@ jaildk_rc() {
     shift
     shift
     
-    rc=''
+    rcd=''
 
     while getopts "r:" arg; do
         case $arg in
@@ -1085,8 +1085,8 @@ jaildk_rc() {
         esac
     done
 
-    if test -z "$rc"; then
-        rc='all'
+    if test -z "$rcd"; then
+        rcd='all'
     fi
 
     if test -z "$jail" -o -z "$mode"; then
@@ -1099,7 +1099,7 @@ jaildk_rc() {
 
     rcs=`get_rc_scripts $jail`
 
-    if test $rc = "all"; then
+    if test $rcd = "all"; then
         bold "Jail $jail rc status:"
         for script in $rcs; do
             jexec $jail $script $mode
@@ -1107,7 +1107,7 @@ jaildk_rc() {
     else
         ok=''
         for script in $rcs; do
-            if echo "$script" | egrep -q "/$rc"; then
+            if echo "$script" | egrep -q "/${rcd}\$"; then
                 jexec $jail $script $mode
                 ok=1
             fi
