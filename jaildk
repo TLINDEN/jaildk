@@ -1728,10 +1728,10 @@ jaildk_ipfw_delete() {
 JAILDIR=/jail
 
 # install modules
-RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree jaildk_rc_pf"
-RCSCRIPTS_STOP="jaildk_rc_pf jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
-RW_RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_rcoff jaildk_rc_ports jaildk_rc_mtree"
-RW_RCSCRIPTS_STOP="jaildk_rc_rcoff jaildk_rc_mount jaildk_rc_ports"
+RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree jaildk_rc_pf"
+RCSCRIPTS_STOP="jaildk_rc_pf jaildk_rc_mount jaildk_rc_ports"
+RW_RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree"
+RW_RCSCRIPTS_STOP="jaildk_rc_mount jaildk_rc_ports"
 
 # globals
 j=$JAILDIR
