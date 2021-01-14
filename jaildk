@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.15
+version=1.16
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -1189,37 +1189,33 @@ jaildk_login() {
     fi
 
     jid=""
-    echo $jail
     jid=`jls | grep "$jail" | awk '{print $1}'`
-    echo $jid
 
     if test -z "$jid"; then
         echo "jail $jail doesn't run!"
         exit 1
     fi
 
-    shell=sh
+    shell=/bin/csh
     home=/home/$user
     term=vt100
     path=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
-    chroot_subdir=`grep "jail_${name}_rootdir" /etc/rc.conf | awk -F\" '{print $2}'`
+    chroot="$j/run/$jail"
 
     if test -z "$user"; then
         user=root
+        home=/root
+    fi
+
+    if test -e $chroot/$home/.bashrc; then
+        shell=/usr/local/bin/bash
     fi
 
     if test "$me" != "0"; then
         jexec="sudo $jexec"
     fi
 
-    shell=/bin/sh
-    home=/
-
-    if grep "^$user" $chroot_subdir/etc/passwd > /dev/null 2>&1; then
-        shell=`grep "^$user" $chroot_subdir/etc/passwd | awk -F: '{print $7}' | sed 's/ //g'`
-        home=`grep "^$user" $chroot_subdir/etc/passwd | awk -F: '{print $6}' | sed 's/ //g'`
-    fi
-
+    echo "# Logging into jail $jail with jid $jid #"
     env - JAIL=$jail HOME=$home TERM=$term SHELL=$shell PATH=$path $jexec -U $user $jid $shell
 }
 
@@ -1719,6 +1715,125 @@ jaildk_ipfw_delete() {
     ipfw show | grep -E "// $jail\$" | while read rule; do [ -z "$2" ] && bold "Deleting rule $rule"; sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
 
 }
+
+
+usage_bootstrap() {
+    echo "$0 bootstrap <jail> [-b <base>] [-v <version>] [-p <port,...>] [-a <appl>] [-i <ip,..>]
+Create, build and install a new jail with name <jail>. Options:
+-b <base>        Use <base> as base, create if not existent.
+-v <version>     Assign <version> to new jail, otherwise use YYYYMMDD.
+-p <port,...>    Install specified ports into jail.
+-a <appl>        Use <appl>-<version> as /usr/local/, create if not existent.
+-i <ip,..>       Configure the jail in /etc/jail.conf with ip addresses <ip,...>
+"
+    exit 1
+}
+
+jaildk_bootstrap() {
+    # combines base, create and build functions into a oneshot command
+    # to create a new jail
+    jail=$1
+    shift
+    
+    BASE=''
+    VERSION=''
+    APPL=''
+    PORTS=''
+    IP=''
+
+    while getopts "b:v:p:a:" arg; do
+        case $arg in
+            b) BASE=${OPTARG};;
+            v) VERSION=${OPTARG};;
+            p) PORTS=${OPTARG};;
+            a) APPL=${OPTARG};;
+            i) IP==${OPTARG};;
+            *) usage_bootstrap;;
+        esac
+    done
+
+    if test -z "$jail"; then
+        usage_bootstrap
+    fi
+
+    # if no base specified, use last  existing one or create one if no
+    # base exists at all
+    if test -z "$BASE"; then
+        lastbase=$(ls -1tr $j/base/ | grep -v build | tail -1)
+        if test -n "$lastbase"; then
+            BASE=$lastbase
+        else
+            BASE=$(uname -r)
+            $(jaildk_base -b $BASE)
+        fi
+    else
+        if ! test -d "$j/base/$BASE"; then
+            # base specified but doesnt exist, so create
+            $(jaildk_base -b $BASE)
+        fi
+    fi
+
+    # version no specified
+    if test -z "$VERSION"; then
+        VERSION=$(date +%Y%m%d)
+    fi
+
+    # creation
+    $(jaildk_create $jail)
+    
+    # appl specified, do NOT clone but start empty IF it doesnt' exist yet
+    if test -n "$APPL"; then
+        if ! test -d "$j/appl/$APPL-$VERSION"; then
+            for subdir in db/ports etc; do
+                ex mkdir -p $j/$APPL-$VERSION/$subdir
+            done
+        fi
+
+        # also fix mount.conf
+        echo "Setting appl to $APPL"
+        sed -iE "s|appl/.+-\$version|appl/$APPL-\$version|" $j/etc/$jail/mount.conf
+    fi
+
+    # mount build
+    if test -n "$PORTS"; then
+        jaildk_build $jail start -b $BASE -v $VERSION
+
+        echo "Installing ports"
+        for port in `echo "$PORTS" | sed 's/,/ /g'`; do
+            chroot $j/build/$jail pkg install $port
+        done
+    fi
+
+    # install
+    jaildk_install $jail start
+
+    # run
+    RUN=''
+    if egrep -q "^${jail} " /etc/jail.conf; then
+        RUN=1
+    else
+        if test -n "$IP"; then
+            echo "Adding $jail with ip addrs $IP to /etc/jail.conf"
+            (echo
+             echo "$jail {"
+             for addr in `echo "$IP" | sed 's/,/ /g'`; do
+                 if echo "$addr" | egrep -q :; then
+                     echo "  ip6.addr = \"$addr\";"
+                 else
+                     echo "  ip4.addr = \"$addr\";"
+                 fi
+             done
+             echo "}"
+            ) >> /etc/jail.conf
+            RUN=1
+        fi
+    fi
+
+    if test -n "$RUN"; then
+        service jail start $jail
+    fi
+}
+
 
 ##########################
 #
