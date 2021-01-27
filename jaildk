@@ -70,15 +70,19 @@ err () {
 }
 
 bold() {
-    if [ -z "$BOLD_ON" ]; then
-        BOLD_ON=`tput -T ${TERM:-cons25} md`
-        export BOLD_ON
-        BOLD_OFF=`tput -T ${TERM:-cons25} me`
-        export BOLD_OFF
+    if [ -z "$NO_BOLD" ]; then
+        if [ -z "$BOLD_ON" ]; then
+            BOLD_ON=`tput -T ${TERM:-cons25} md`
+            export BOLD_ON
+            BOLD_OFF=`tput -T ${TERM:-cons25} me`
+            export BOLD_OFF
+        fi
+        echo -n "$BOLD_ON"
+        echo "$@"
+        echo -n "$BOLD_OFF"
+    else
+        echo "$@"
     fi
-    echo -n "$BOLD_ON"
-    echo "$@"
-    echo -n "$BOLD_OFF"
 }
 
 fin() {
@@ -1053,13 +1057,14 @@ jaildk_jail() {
 
 get_rc_scripts() {
     jail="$1"
+    jailpath=`get_jail_path $jail`
 
-    files=$(ls $j/run/$jail/usr/local/etc/rc.d/* $j/run/$jail/etc/rc.d/*)
+    files=$(ls $j/run/$jailpath/usr/local/etc/rc.d/* $j/run/$jailpath/etc/rc.d/* 2>/dev/null)
 
-    rcorder $files | while read SCRIPT; do
+    rcorder $files 2>/dev/null | while read SCRIPT; do
         rcvar=`egrep "^rcvar=" $SCRIPT | cut -d= -f2 | sed 's/"//g' | tail -1`
-        if egrep -iq "^${rcvar}=.*yes" $j/run/$jail/usr/local/etc/rc.conf; then
-            echo $SCRIPT | sed "s|$j/run/$jail||"
+        if egrep -iq "^${rcvar}=.*yes" $j/run/$jailpath/usr/local/etc/rc.conf; then
+            echo $SCRIPT | sed "s|$j/run/$jailpath||"
         fi
     done
 }
@@ -1096,19 +1101,25 @@ jaildk_rc() {
     if ! jls | egrep -q "${jail}"; then
         die "Jail $jail is not running."
     fi
-
+  
     rcs=`get_rc_scripts $jail`
 
+    jid=`get_jid $jail`
+    jailpath=`get_jail_path $jail`
     if test $rcd = "all"; then
-        bold "Jail $jail rc status:"
+        if [ "$jail" == "$jailpath" ]; then
+            bold "Jail $jail rc status:"
+        else
+            bold "Jail $jail/$jailpath rc status:"
+        fi
         for script in $rcs; do
-            jexec $jail $script $mode
+            jexec $jid $script $mode
         done
     else
         ok=''
         for script in $rcs; do
             if echo "$script" | egrep -q "/${rcd}\$"; then
-                jexec $jail $script $mode
+                jexec $jid $script $mode
                 ok=1
             fi
         done
@@ -1117,6 +1128,16 @@ jaildk_rc() {
             die "Script $rc doesn't exist in $jail or is not enabled."
         fi
     fi
+}
+
+get_jail_path() {
+    jail="$1"
+    echo "$(jls |grep -E "^ +[0-9]+  +[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ *${jail} +" | awk '{print $4}' | xargs basename)"
+}
+
+get_jid() {
+    jail="$1"
+    echo "$(jls | grep -E  "^ +[0-9]+  +[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ *${jail} +" | awk '{print $1}' | xargs basename)"
 }
 
 usage_blogin() {
