@@ -588,7 +588,7 @@ jaildk_uninstall() {
 
     while getopts "w" arg; do
         case $arg in
-            w) rw=1;;
+            w) rw="-w";;
             *) usage_uninstall;;
         esac
     done
@@ -603,7 +603,7 @@ jaildk_uninstall() {
         die "Jail $jail($version) is still running, stop it before removing!"
     fi
 
-    jaildk_install $jail stop -r all -w
+    jaildk_install $jail stop -r all $rw
 }
 
 
