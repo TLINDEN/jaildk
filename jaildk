@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.17
+version=1.18
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -438,7 +438,7 @@ jaildk_rc_mount() {
                         mfs)
                             ex mdmfs -o $opts -s $size -p $perm md $run/$dest
                             ;;
-                        nullfs)
+                        nullfs|unionfs)
                             source=$j/$src
                             if echo $src | egrep -q "^/"; then
                               source=$src
