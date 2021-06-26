@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.18
+version=1.19
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -637,23 +637,27 @@ jaildk_uninstall() {
 
 
 usage_base() {
-    fin "Usage: $0 base -b <basename|basedir> [-w]
+    fin "Usage: $0 base [-f] -b <basename|basedir> [-w]
 Build a base directory from bsd install media. Options:
 -b <name>     <name> can be the name of a base (e.g. 12.2-RELEASE)
               or a directory where it shall be created
 -w            Create a writable base, including compiler and other
               build stuff. Use this if you want to use the ports
-              collection."
+              collection.
+-f            force mode, remove any old dist files.
+"
 }
 
 jaildk_base() {
     base=""
+    force=""
     rw=""
 
-    while getopts "b:w" arg; do
+    while getopts "b:wf" arg; do
         case $arg in
             w) rw=1;;
             b) base=${OPTARG};;
+            f) force=1;;
             *) usage_base;;
         esac
     done
@@ -737,6 +741,27 @@ var/tmp"
         exit 1
     else
         ex mkdir -p $basedir
+
+        if test -e /usr/freebsd-dist/MANIFEST; then
+            clean=''
+            if test -n "$force"; then
+                clean=1
+            else
+                echo "Found old dist files:"
+                ls -l /usr/freebsd-dist
+                echo -n "Want to remove them [Yn]? "
+                read yesno
+                case $yesno in 
+                    n) clean='';;
+                    *) clean=1;;
+                esac
+            fi
+
+            if test -n "$clean"; then
+                ex rm -f /usr/freebsd-dist/*
+            fi
+        fi
+
         bsdinstall jail $basedir || exit 1
 
         if test -z "$rw"; then
