@@ -749,11 +749,11 @@ var/tmp"
             else
                 echo "Found old dist files:"
                 ls -l /usr/freebsd-dist
-                echo -n "Want to remove them [Yn]? "
+                echo -n "Want to remove them [nY]? "
                 read yesno
-                case $yesno in 
-                    n) clean='';;
-                    *) clean=1;;
+                case $yesno in
+                    y|Y) clean=1;;
+                    *)   clean='';;
                 esac
             fi
 
