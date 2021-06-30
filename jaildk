@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.19
+version=1.20
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -28,7 +28,7 @@ ${beg}Maintaining Jails:${end}
 start <jail>                                     - start a jail
 stop <jail>                                      - stop a jail
 restart <jail>                                   - restart a jail
-status [<jail>]                                  - display a jail's status
+status [<jail>] [-v]                             - display status of jails or <jail>
 rc <jail> <mode> [-r <rc.d script>]              - execute an rc-script inside a jail
 ipfw <jail> <mode>                               - add or remove ipfw rules
 
@@ -1078,20 +1078,44 @@ jaildk_jail() {
 
     if test -z "$jail" -a $mode = "status"; then
         bold "Running jails:"
-        bold "   JID  IP Address      Hostname                      Path"
-        jls | grep -v JID
-        
-        bold "Mounted build jails:"
-        format="        %-15s %-29s %s\n"
 
-        bold "        Version         Hostname                      Path"
-        mount | egrep "local-etc.*build" | awk '{print $1}' | sed -e 's|/| |g' -e 's/local-etc-//' | while read j e jail version; do
-            printf "$format" $version $jail $j/build/$jail
-        done
+        (
+            echo "Jail IP-Address Path Is-Running Build-Mounted Current-Version Base"
+            grep -h "name=" $j/etc/*/jail.conf | cut -d= -f2 | while read jail; do
+                jid=''
+                ip=''
+                path=''
+                runs=''
+                build='no'
+                base=''
+                load-jail-config $jail
+                if jls -j $jail > /dev/null 2>&1; then
+                    # jail is running
+                    eval `jls -j $jail -qn | perl -n -e 'chomp; %j = map { ($a,$b) = split /=/; $a=~ s/\.//g; $a => $b } split/ /; foreach (keys %j) {print "$_=$j{$_}\n"}'`
+                    if test -n "$ip4addr"; then
+                        ip=$ip4addr
+                    else
+                        if test -z "$ip"; then
+                            ip="n/a"
+                        fi
+                    fi
+                    jid="yes,jid=$jid"
+                else
+                    jid="no"
+                    osrelease=$base
+                    path=$j/run/$jail
+                    if test -z "$ip"; then
+                        ip="n/a"
+                    fi
+                fi
 
-        jls | grep -v JID | awk '{print $3}' | while read J; do
-            jaildk_rc $J status
-        done
+                if mount | egrep "$j/build/$jail" > /dev/null 2>&1; then
+                    build='yes'
+                fi
+
+                echo "$jail $ip $path $jid $build $version $osrelease"
+            done
+        ) | column -t
     elif test -z "$jail"; then
         usage_$mode
     else
@@ -1791,6 +1815,94 @@ jaildk_ipfw_delete() {
 
 }
 
+usage_vnet() {
+    echo "$0 vnet <jail> <mode> -b <bridge>"
+    echo "Configure VIMAGE (vnet) networking for a jail. Usually called from"
+    echo "jail.conf. You need to configure the bridge manually in advance."
+    echo
+    echo "You need the following in your /etc/rc.conf:"
+    echo "  cloned_interfaces=\"bridge0\""
+    echo "  ifconfig_bridge0=\"name jailsw0 up 172.20.20.1/24\""
+    echo
+    echo "And something like this in your jail.conf:"
+    echo "  billa {"
+    echo "    vnet;"
+    echo "    exec.created = \"/home/scip/git/jaildk/jaildk vnet $name start -b jailsw0\";"
+    echo "    exec.prestop = \"/home/scip/git/jaildk/jaildk vnet $name stop -b vm-jailnet\";"
+    echo "  }"
+    echo
+    echo "Finally, the jail.conf for a vnet jail needs to contain these two"
+    echo "parameters:"
+    echo "  ip=172.20.20.10/24"
+    echo "  gw=172.20.20.1"
+
+    echo "You'll also need PF nat rules in order to be able to reach the outside"
+    echo "from the jail or vice versa."
+}
+
+jaildk_vnet() {
+    jail=$1
+    mode=$2
+    shift
+    shift
+
+    BRIDGE=''
+
+    while getopts "b:i:r:" arg; do
+        case $arg in
+            b) BRIDGE=${OPTARG};;
+            *) usage_vnet;;
+        esac
+    done
+
+    if test -z "$mode"; then
+        usage_vnet
+    fi
+
+    die_if_not_exist $jail
+
+    load-jail-config $jail
+
+    vnethost="ep${jail}.h"
+    vnetjail="ep${jail}.j"
+
+    case $mode in
+        start)
+            # FIXME: add error handling!
+            epairA=$(ifconfig epair create)
+            epairB="${epairA%?}b"
+
+            ifconfig $epairA name $vnethost
+            ifconfig $epairB name $vnetjail
+
+            # if vm-bhyve is enabled we could use this as well:
+            #vm switch add $BRIDGE $vnethost
+
+            # make sure
+            ifconfig $vnetjail up
+            ifconfig $vnethost up
+
+            # add the host to the bridge
+            ifconfig $BRIDGE addm $vnethost up
+
+            # add the jail to the bridge (gets invisible from host)
+            ifconfig $vnetjail vnet $jail
+
+            # configure the jail network stack inside the jail
+            jexec $jail ifconfig $vnetjail $ip up
+            jexec $jail route add default $gw
+            ;;
+        stop)
+            # remove vnet from the jail
+            ifconfig $vnetjail -vnet $jail || true
+
+            # remove interfaces (removes jail interface as well, since this is an epair)
+            ifconfig $vnethost destroy || true
+            ;;
+        *)
+            usage_vnet;;
+    esac    
+}
 
 usage_bootstrap() {
     echo "$0 bootstrap <jail> [-b <base>] [-v <version>] [-p <port,...>] [-a <appl>] [-i <ip,..>]
@@ -1938,7 +2050,7 @@ case $runner in
     start|stop|status|restart)
         jaildk_jail $runner $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetchports|freeze|thaw|ipfw)
+    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetchports|freeze|thaw|ipfw|vnet)
         jaildk_$runner $*
         ;;
     help)
