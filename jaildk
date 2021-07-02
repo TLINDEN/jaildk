@@ -303,92 +303,100 @@ jaildk_rc_pf() {
     
     load-jail-config $jail
 
-    if test -n "$rules" -o -n "$maps"; then
-        # generate a pf.conf based on config variables
-        echo "# generated pf ruleset for jail, generated on ` date`" > $ruleset
-        extif=$(netstat -rnfinet | grep default | cut -f4 -w)
-    fi
+    # TODO:
+    # - put this into a separate function
+    # - clean up if generation of pf-ruleset.conf fails somehow
+    # - make a syntax check of the generated rules, if possible
+    case $mode in
+        start|restart)
+            if test -n "$rules" -o -n "$maps"; then
+                # generate a pf.conf based on config variables
+                echo "# generated pf ruleset for jail, generated on ` date`" > $ruleset
+                extif=$(netstat -rnfinet | grep default | cut -f4 -w)
+            fi
        
-    if test -n "$ip" -a -n "$maps"; then
-        # nat and rdr come first
+            if test -n "$ip" -a -n "$maps"; then
+                # nat and rdr come first
+                
+                # SAMPLE ruleset
+                # maps="web ntp kjk"
+                # map_web_proto="tcp"
+                # map_web_exposed_port=80
+                # map_web_mapped_port=8080
+                # map_web_exposed_ip="123.12.12.3"
+                # map_web_exposed_ip6="2a01::ff"
+                # map_ntp_proto="udp"
+                # map_ntp_exposed_port=123
+                # map_ntp_mapped_port=1234
+                # map_ntp_exposed_ip="123.12.12.33"
+                # map_kjk_proto="tcp"
+                # map_kjk_exposed_ports="1501 1502 1502" # maped 1:1
+                # map_kjk_exposed_ip="123.12.12.33"
 
-        # SAMPLE ruleset
-        # maps="web ntp kjk"
-        # map_web_proto="tcp"
-        # map_web_exposed_port=80
-        # map_web_mapped_port=8080
-        # map_web_exposed_ip="123.12.12.3"
-        # map_web_exposed_ip6="2a01::ff"
-        # map_ntp_proto="udp"
-        # map_ntp_exposed_port=123
-        # map_ntp_mapped_port=1234
-        # map_ntp_exposed_ip="123.12.12.33"
-        # map_kjk_proto="tcp"
-        # map_kjk_exposed_ports="1501 1502 1502" # maped 1:1
-        # map_kjk_exposed_ip="123.12.12.33"
+                for map in $maps; do
+                    # slurp in the values for this map
+                    eval _proto=\${map_${map}_proto:-tcp}
+                    eval _eport=\${map_${map}_exposed_port}
+                    eval _mport=\${map_${map}_mapped_port:-${_eport}}
+                    eval _eports=\${map_${map}_exposed_ports}
+                    eval _eip=\${map_${map}_exposed_ip:-$extif}
+                    eval _eip6=\${map_${map}_exposed_ip6:-$extif}
 
-        for map in $maps; do
-            # slurp in the values for this map
-            eval _proto=\${map_${map}_proto:-tcp}
-            eval _eport=\${map_${map}_exposed_port}
-            eval _mport=\${map_${map}_mapped_port:-${_eport}}
-            eval _eports=\${map_${map}_exposed_ports}
-            eval _eip=\${map_${map}_exposed_ip:-$extif}
-            eval _eip6=\${map_${map}_exposed_ip6:-$extif}
+                    if test -z ${_eport} -o -z ${_eip}; then
+                        echo "Warning: ignoring incomplete map: $map!"
+                        continue
+                    fi
 
-            if test -z ${_eport} -o -z ${_eip}; then
-                echo "Warning: ignoring incomplete map: $map!"
-                continue
+                    if test -n "${_eport}"; then
+                        if test -z "{_mport}"; then
+                            # map ports 1:1
+                            _mport=${_eport}
+                        fi
+                        echo "# from map $map" >> $ruleset
+                        jaildk_pf_map $extif ${_eproto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
+
+                        if test -n "${_eip6}" -a -n "$ip6"; then
+                            jaildk_pf_map $extif ${_eproto} ${_eip6} ${_eport} ${_mport} ${ip6} inet6 >> $ruleset
+                        fi
+                    fi
+
+                    for port in ${_eports}; do
+                        jaildk_pf_map $extif ${_eproto} ${_eip} ${port} ${port} ${ip} >> $ruleset
+
+                        if test -n "${_eip6}" -a -n "$ip6"; then
+                            jaildk_pf_map $extif ${_eproto} ${_eip6} ${port} ${port} ${ip6} inet6 >> $ruleset
+                        fi
+                    done
+                done
             fi
 
-            if test -n "${_eport}"; then
-                if test -z "{_mport}"; then
-                    # map ports 1:1
-                    _mport=${_eport}
-                fi
-                echo "# from map $map" >> $ruleset
-                jaildk_pf_map $extif ${_eproto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
+            if test -n "$ip" -a -n "$rules"; then
+                # rules="open web"
+                # rule_open="any"
+                # rule_web_proto="tcp"_
+                # rule_web_port="80,443"
 
-                if test -n "${_eip6}" -a -n "$ip6"; then
-                    jaildk_pf_map $extif ${_eproto} ${_eip6} ${_eport} ${_mport} ${ip6} inet6 >> $ruleset
-                fi
+                #   pass in quick on $ext proto tcp from any to $extip port 80 keep state
+
+                for rule $rules; do
+                    eval _proto=\${rule_${rule}_proto:-tcp}
+                    eval _port=\${rule_${rule}_port}
+
+                    if test -n "${_port}"; then
+                        echo "# from map $map" >> $ruleset
+                        jaildk_pf_rule $extif ${_proto} ${ip} ${_port} >> $ruleset
+                    else
+                        echo "Warning: incomplete rule: $rule!"
+                        continue
+                    fi
+
+                    if test -n "${ip6}"; then
+                        jaildk_pf_rule $extif ${_proto} ${ip6} ${_port} inet6 >> $ruleset
+                    fi
+                done
             fi
-
-            for port in ${_eports}; do
-                jaildk_pf_map $extif ${_eproto} ${_eip} ${port} ${port} ${ip} >> $ruleset
-
-                if test -n "${_eip6}" -a -n "$ip6"; then
-                    jaildk_pf_map $extif ${_eproto} ${_eip6} ${port} ${port} ${ip6} inet6 >> $ruleset
-                fi
-            done
-        done
-    fi
-
-    if test -n "$ip" -a -n "$rules"; then
-        # rules="open web"
-        # rule_open="any"
-        # rule_web_proto="tcp"_
-        # rule_web_port="80,443"
-
-        #   pass in quick on $ext proto tcp from any to $extip port 80 keep state
-
-        for rule $rules; do
-            eval _proto=\${rule_${rule}_proto:-tcp}
-            eval _port=\${rule_${rule}_port}
-
-            if test -n "${_port}"; then
-                echo "# from map $map" >> $ruleset
-                jaildk_pf_rule $extif ${_proto} ${ip} ${_port} >> $ruleset
-            else
-                echo "Warning: incomplete rule: $rule!"
-                continue
-            fi
-
-            if test -n "${ip6}"; then
-                jaildk_pf_rule $extif ${_proto} ${ip6} ${_port} inet6 >> $ruleset
-            fi
-        done
-    fi
+            ;;
+    esac
 
     if test -s $ruleset; then
         anchor="$jail/jaildk"
