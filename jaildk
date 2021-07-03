@@ -244,30 +244,30 @@ jaildk_build() {
 
 jaildk_pf_ruleset() {
     # internal helper to [un]install a pf ruleset
-    conf=$1
-    mode=$2
-    anchor=$3
-    jail=$4
+    _conf=$1
+    _mode=$2
+    _anchor=$3
+    _jail=$4
 
-    case $mode in
+    case $_mode in
         start)
-            bold "Installing PF rules for jail $jail:"
-            pfctl -a /jail/$anchor -f $conf -v
+            bold "Installing PF rules for jail $_jail:"
+            pfctl -a /jail/$_anchor -f $_conf -v
             ;;
         status)
-            bold "PF NAT rules for jail $jail:"
-            pfctl -a /jail/$anchor -s nat -v
+            bold "PF NAT rules for jail $_jail:"
+            pfctl -a /jail/$_anchor -s nat -v
             echo
-            bold "PF rules for jail $jail:"
-            pfctl -a /jail/$anchor -s rules -v
+            bold "PF rules for jail $_jail:"
+            pfctl -a /jail/$_anchor -s rules -v
             ;;
         stop)
-            bold "Removing PF rules for jail $jail:"
-            pfctl -a /jail/$anchor -v -F all
+            bold "Removing PF rules for jail $_jail:"
+            pfctl -a /jail/$_anchor -v -F all
             ;;
         restart)
-            jaildk_pf_ruleset $jail $conf stop  $anchor $jail
-            jaildk_pf_ruleset $jail $conf start $anchor $jail
+            jaildk_pf_ruleset $_conf stop  $_anchor $_jail
+            jaildk_pf_ruleset $_conf start $_anchor $_jail
             ;;
     esac
 }
@@ -281,7 +281,7 @@ jaildk_pf_map() {
     ip=$6
     v6=$7
 
-    echo "rdr pass on $extif $v6 proto ${proto} from any to ${eip} port ${port} -> ${ip} port ${mport}"
+    echo "rdr pass on $extif $v6 proto ${proto} from any to ${eip} port ${eport} -> ${ip} port ${mport}"
 }
 
 jaildk_pf_rule() {
@@ -291,9 +291,17 @@ jaildk_pf_rule() {
     eport=$4
     v6=$5
 
-    echo "pass in quick on $extif $v6 proto ${eproto} from any to ${eip} port ${eport}"
+    echo "pass in quick on $extif $v6 proto ${proto} from any to ${eip} port ${eport}"
 }
 
+jaildk_pf_nat() {
+    extif=$1
+    srcip=$2
+    dstip=$3
+    v6=$4
+
+    echo "nat on $extif $v6 from $srcip to any -> $dstip"
+}
 
 jaildk_rc_pf() {
     jail=$1
@@ -309,12 +317,16 @@ jaildk_rc_pf() {
     # - make a syntax check of the generated rules, if possible
     case $mode in
         start|restart)
-            if test -n "$rules" -o -n "$maps"; then
+            if test -n "$masq_ip" -o -n "$rules" -o -n "$maps"; then
                 # generate a pf.conf based on config variables
                 echo "# generated pf ruleset for jail, generated on ` date`" > $ruleset
                 extif=$(netstat -rnfinet | grep default | cut -f4 -w)
             fi
-       
+
+            # we need to make sure the ip address doesn't contain a mask which
+            # is not required for these rules
+            ip=$(dirname $ip)
+            
             if test -n "$ip" -a -n "$maps"; then
                 # nat and rdr come first
                 
@@ -353,32 +365,38 @@ jaildk_rc_pf() {
                             _mport=${_eport}
                         fi
                         echo "# from map $map" >> $ruleset
-                        jaildk_pf_map $extif ${_eproto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
+                        jaildk_pf_map $extif ${_proto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
 
                         if test -n "${_eip6}" -a -n "$ip6"; then
-                            jaildk_pf_map $extif ${_eproto} ${_eip6} ${_eport} ${_mport} ${ip6} inet6 >> $ruleset
+                            jaildk_pf_map $extif ${_proto} ${_eip6} ${_eport} ${_mport} ${ip6} inet6 >> $ruleset
                         fi
                     fi
 
                     for port in ${_eports}; do
-                        jaildk_pf_map $extif ${_eproto} ${_eip} ${port} ${port} ${ip} >> $ruleset
+                        jaildk_pf_map $extif ${_proto} ${_eip} ${port} ${port} ${ip} >> $ruleset
 
                         if test -n "${_eip6}" -a -n "$ip6"; then
-                            jaildk_pf_map $extif ${_eproto} ${_eip6} ${port} ${port} ${ip6} inet6 >> $ruleset
+                            jaildk_pf_map $extif ${_proto} ${_eip6} ${port} ${port} ${ip6} inet6 >> $ruleset
                         fi
                     done
                 done
             fi
 
+            # masq_ip="123.12.12.33"
+            # masq_ip6=2a01::..."
+            if test -n "$ip" -a -n "${masq_ip}"; then
+                jaildk_pf_nat $extif $ip ${masq_ip} >> $ruleset
+            fi
+            if test -n "$ip6" -a -n "${masq_ip6}"; then
+                jaildk_pf_nat $extif $ip ${masq_ip} inet6 >> $ruleset
+            fi
+            
             if test -n "$ip" -a -n "$rules"; then
                 # rules="open web"
                 # rule_open="any"
                 # rule_web_proto="tcp"_
                 # rule_web_port="80,443"
-
-                #   pass in quick on $ext proto tcp from any to $extip port 80 keep state
-
-                for rule $rules; do
+                for rule in $rules; do
                     eval _proto=\${rule_${rule}_proto:-tcp}
                     eval _port=\${rule_${rule}_port}
 
@@ -399,12 +417,12 @@ jaildk_rc_pf() {
     esac
 
     if test -s $ruleset; then
-        anchor="$jail/jaildk"
+        anchor="${jail}-jaildk"
         jaildk_pf_ruleset $ruleset $mode $anchor $jail
     fi
     
-    if test -f $conf; then
-        anchor="$jail/custom"
+    if test -s $conf; then
+        anchor="${jail}-custom"
         jaildk_pf_ruleset $conf $mode $anchor $jail
     fi
 }
