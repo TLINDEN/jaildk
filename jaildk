@@ -336,7 +336,6 @@ jaildk_rc_pf() {
                 # map_web_exposed_port=80
                 # map_web_mapped_port=8080
                 # map_web_exposed_ip="123.12.12.3"
-                # map_web_exposed_ip6="2a01::ff"
                 # map_ntp_proto="udp"
                 # map_ntp_exposed_port=123
                 # map_ntp_mapped_port=1234
@@ -352,7 +351,6 @@ jaildk_rc_pf() {
                     eval _mport=\${map_${map}_mapped_port:-${_eport}}
                     eval _eports=\${map_${map}_exposed_ports}
                     eval _eip=\${map_${map}_exposed_ip:-$extif}
-                    eval _eip6=\${map_${map}_exposed_ip6:-$extif}
 
                     if test -z ${_eport} -o -z ${_eip}; then
                         echo "Warning: ignoring incomplete map: $map!"
@@ -366,50 +364,37 @@ jaildk_rc_pf() {
                         fi
                         echo "# from map $map" >> $ruleset
                         jaildk_pf_map $extif ${_proto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
-
-                        if test -n "${_eip6}" -a -n "$ip6"; then
-                            jaildk_pf_map $extif ${_proto} ${_eip6} ${_eport} ${_mport} ${ip6} inet6 >> $ruleset
-                        fi
                     fi
 
                     for port in ${_eports}; do
                         jaildk_pf_map $extif ${_proto} ${_eip} ${port} ${port} ${ip} >> $ruleset
-
-                        if test -n "${_eip6}" -a -n "$ip6"; then
-                            jaildk_pf_map $extif ${_proto} ${_eip6} ${port} ${port} ${ip6} inet6 >> $ruleset
-                        fi
                     done
                 done
             fi
 
             # masq_ip="123.12.12.33"
-            # masq_ip6=2a01::..."
             if test -n "$ip" -a -n "${masq_ip}"; then
                 jaildk_pf_nat $extif $ip ${masq_ip} >> $ruleset
-            fi
-            if test -n "$ip6" -a -n "${masq_ip6}"; then
-                jaildk_pf_nat $extif $ip ${masq_ip} inet6 >> $ruleset
             fi
             
             if test -n "$ip" -a -n "$rules"; then
                 # rules="open web"
+                # only required for ipv6, ipv4 is already opened with exposed ports
                 # rule_open="any"
-                # rule_web_proto="tcp"_
+                # rule_web_proto="tcp"
                 # rule_web_port="80,443"
                 for rule in $rules; do
                     eval _proto=\${rule_${rule}_proto:-tcp}
                     eval _port=\${rule_${rule}_port}
 
                     if test -n "${_port}"; then
-                        echo "# from map $map" >> $ruleset
-                        jaildk_pf_rule $extif ${_proto} ${ip} ${_port} >> $ruleset
+                        if test -n "${ip6}"; then
+                            echo "# from map $map" >> $ruleset
+                            jaildk_pf_rule $extif ${_proto} ${ip6} ${_port} inet6 >> $ruleset
+                        fi
                     else
                         echo "Warning: incomplete rule: $rule!"
                         continue
-                    fi
-
-                    if test -n "${ip6}"; then
-                        jaildk_pf_rule $extif ${_proto} ${ip6} ${_port} inet6 >> $ruleset
                     fi
                 done
             fi
@@ -1976,19 +1961,24 @@ usage_vnet() {
     echo
     echo "You need the following in your /etc/rc.conf:"
     echo "  cloned_interfaces=\"bridge0\""
+    echo "  ipv6_ifconfig_bridge0=\"2a01:...::1/80\""
     echo "  ifconfig_bridge0=\"name jailsw0 up 172.20.20.1/24\""
+    echo "  ipv6_gateway_enable=\"YES\""
     echo
     echo "And something like this in your jail.conf:"
     echo "  billa {"
     echo "    vnet;"
-    echo "    exec.created = \"/home/scip/git/jaildk/jaildk vnet $name start -b jailsw0\";"
-    echo "    exec.prestop = \"/home/scip/git/jaildk/jaildk vnet $name stop -b vm-jailnet\";"
+    echo "    exec.created = \"/jail/bin/jaildk vnet $name start -b jailsw0\";"
+    echo "    exec.prestop = \"/jail/bin/jaildk vnet $name stop -b vm-jailnet\";"
     echo "  }"
     echo
-    echo "Finally, the jail.conf for a vnet jail needs to contain these two"
-    echo "parameters:"
+    echo "Finally, the jail.conf for a vnet jail needs to contain these parameters:"
     echo "  ip=172.20.20.10/24"
     echo "  gw=172.20.20.1"
+    echo
+    echo "and if using v6 v6 address in bridge subet, gw6 is default gw => bridge interface"
+    echo "  ip6=2a01:.....ff"
+    echo "  gw6=2a01:.....1"
 
     echo "You'll also need PF nat rules in order to be able to reach the outside"
     echo "from the jail or vice versa."
@@ -2035,25 +2025,30 @@ jaildk_vnet() {
             epairA=$(ifconfig epair create)
             epairB="${epairA%?}b"
 
-            ifconfig $epairA name $vnethost
-            ifconfig $epairB name $vnetjail
+            ex ifconfig $epairA name $vnethost
+            ex ifconfig $epairB name $vnetjail
 
             # if vm-bhyve is enabled we could use this as well:
             #vm switch add $BRIDGE $vnethost
 
             # make sure
-            ifconfig $vnetjail up
-            ifconfig $vnethost up
+            ex ifconfig $vnetjail up
+            ex ifconfig $vnethost up
 
             # add the host to the bridge
-            ifconfig $BRIDGE addm $vnethost up
+            ex ifconfig $BRIDGE addm $vnethost up
 
             # add the jail to the bridge (gets invisible from host)
-            ifconfig $vnetjail vnet $jail
+            ex ifconfig $vnetjail vnet $jail
 
             # configure the jail network stack inside the jail
-            jexec $jail ifconfig $vnetjail $ip up
-            jexec $jail route add default $gw
+            ex jexec $jail ifconfig $vnetjail $ip up
+            ex jexec $jail route add default $gw
+
+            if -n "$ip6" -a -n "$gw6"; then
+                ex jexec $jail ifconfig $vnetjail inet6 $ip6
+                ex jexec $jail route -6 add default $gw6
+            fi
             ;;
         stop)
             # remove vnet from the jail
