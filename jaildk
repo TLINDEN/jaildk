@@ -1219,7 +1219,7 @@ jaildk_jail() {
         bold "Running jails:"
 
         (
-            echo "Jail IP-Address Path Is-Running Build-Mounted Current-Version Base"
+            echo "Jail IP-Address Path Is-Running RW-mounted Current-Version Base"
             grep -h "name=" $j/etc/*/jail.conf | cut -d= -f2 | while read jail; do
                 jid=''
                 ip=''
@@ -1227,7 +1227,18 @@ jaildk_jail() {
                 runs=''
                 build='no'
                 base=''
+
                 load-jail-config $jail
+
+                _eip=''
+                for map in $maps; do
+                    eval _eip=\${map_${map}_exposed_ip}
+                    if test -n "${_eip}"; then
+                        # we only display the first exposed ip we find, if any
+                        break
+                    fi
+                done
+
                 if jls -j $jail > /dev/null 2>&1; then
                     # jail is running
                     eval `jls -j $jail -qn | perl -n -e 'chomp; %j = map { ($a,$b) = split /=/; $a=~ s/\.//g; $a => $b } split/ /; foreach (keys %j) {print "$_=$j{$_}\n"}'`
@@ -1236,6 +1247,11 @@ jaildk_jail() {
                     else
                         if test -z "$ip"; then
                             ip="n/a"
+                        else
+                            # ip configured
+                            if test -n "${_eip}"; then
+                                ip="${_eip}->${ip}"
+                            fi
                         fi
                     fi
                     jid="yes,jid=$jid"
@@ -2219,23 +2235,26 @@ fi
 
 case $runner in
     start|stop|restart)
+        # running jails
         mustberoot
         jaildk_jail $runner $*
         ;;
     status)
+        # same, w/o root
         jaildk_jail status $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|clone|create|remove|rc|base|fetchports|freeze|thaw|ipfw|vnet)
-        mustberoot
-        jaildk_$runner $*
-        ;;
     login)
+        # login into jail as non root user allowed
+        # eventually calls sudo
         jaildk_login $*
         ;;
-    help)
-        usage_help $*
-        ;;
     *)
-        usage_jaildk $*
+        # every other management command, if it exists
+        if type "jaildk_$runner" 2> /dev/null; then
+            mustberoot
+            jaildk_$runner $*
+        else
+            usage_jaildk $*
+        fi
         ;;
 esac
