@@ -2045,7 +2045,13 @@ jaildk_vnet() {
             ex jexec $jail ifconfig $vnetjail $ip up
             ex jexec $jail route add default $gw
 
-            if -n "$ip6" -a -n "$gw6"; then
+            if test -n "$ip6" -a -n "$gw6"; then
+                ex jexec $jail ifconfig $vnetjail inet6 $ip6
+                ex jexec $jail route -6 add default $gw6
+            fi
+            ;;
+        start6)
+            if test -n "$ip6" -a -n "$gw6"; then
                 ex jexec $jail ifconfig $vnetjail inet6 $ip6
                 ex jexec $jail route -6 add default $gw6
             fi
