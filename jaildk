@@ -2185,6 +2185,12 @@ jaildk_bootstrap() {
     fi
 }
 
+mustberoot() {
+    if test "$( id -u )" -ne 0; then
+        echo "Must run as root!" >&2
+        exit 1
+    fi
+}
 
 ##########################
 #
@@ -2211,11 +2217,19 @@ if test -z "$runner"; then
 fi
 
 case $runner in
-    start|stop|status|restart)
+    start|stop|restart)
+        mustberoot
         jaildk_jail $runner $*
         ;;
-    setup|reinstall|install|uninstall|build|blogin|login|clone|create|remove|rc|base|fetchports|freeze|thaw|ipfw|vnet)
+    status)
+        jaildk_jail status $*
+        ;;
+    setup|reinstall|install|uninstall|build|blogin|clone|create|remove|rc|base|fetchports|freeze|thaw|ipfw|vnet)
+        mustberoot
         jaildk_$runner $*
+        ;;
+    login)
+        jaildk_login
         ;;
     help)
         usage_help $*
