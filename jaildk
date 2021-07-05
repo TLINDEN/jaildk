@@ -1019,7 +1019,6 @@ jaildk_clone() {
         esac
     done
 
-
     if test -z "$new"; then
         usage_clone
     fi
@@ -1037,7 +1036,7 @@ jaildk_clone() {
     fi
 
     die_if_not_exist $src "Source jail"
-    load-jail-config $jail
+    load-jail-config $src
 
     if test -z "$srcversion"; then
         srcversion=$version
