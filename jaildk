@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.21
+version=1.22
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -96,8 +96,9 @@ die() {
 }
 
 load-jail-config() {
-    jail=$1
+    local jail=$1
     if test -d $j/etc/$jail; then
+        # everything inside gets global
         . $j/etc/$jail/jail.conf
     else
         die "Jail $jail is not configured!"
@@ -105,6 +106,8 @@ load-jail-config() {
 }
 
 die_if_not_exist() {
+    local jail which jailversion
+
     jail=$1
     which=$2
     jailversion=$3
@@ -134,10 +137,10 @@ parse_jail_conf() {
     # Output may be  empty, so check before  using. Multiple variables
     # of the same  type (like multiple ip addresses)  will be returned
     # comma separated.
-    jail=$1
-    search=$2
-    JAIL=''
-    list=''
+
+    local jail=$1
+    local search=$2
+    local JAIL list
 
     # fetch 20 lines after "^$jail {", ignore comments
     egrep -A20 "^$jail" jail.conf | egrep -v "^ *#" | \
@@ -185,6 +188,8 @@ Mount <jail> to $j/build read-writable for maintenance. Options:
 }
 
 jaildk_build() {
+    local jail mode BASE VERSION base version
+
     jail=$1
     mode=$2
     shift
@@ -242,37 +247,40 @@ jaildk_build() {
     esac
 }
 
-jaildk_pf_ruleset() {
+pf_ruleset() {
     # internal helper to [un]install a pf ruleset
-    _conf=$1
-    _mode=$2
-    _anchor=$3
-    _jail=$4
+    local conf mode anchor jail
+    conf=$1
+    mode=$2
+    anchor=$3
+    jail=$4
 
-    case $_mode in
+    case $mode in
         start)
-            bold "Installing PF rules for jail $_jail:"
-            pfctl -a /jail/$_anchor -f $_conf -v
+            bold "Installing PF rules for jail $jail:"
+            pfctl -a /jail/$anchor -f $conf -v
             ;;
         status)
-            bold "PF NAT rules for jail $_jail:"
-            pfctl -a /jail/$_anchor -s nat -v
+            bold "PF NAT rules for jail $jail:"
+            pfctl -a /jail/$anchor -s nat -v
             echo
-            bold "PF rules for jail $_jail:"
-            pfctl -a /jail/$_anchor -s rules -v
+            bold "PF rules for jail $jail:"
+            pfctl -a /jail/$anchor -s rules -v
             ;;
         stop)
-            bold "Removing PF rules for jail $_jail:"
-            pfctl -a /jail/$_anchor -v -F all
+            bold "Removing PF rules for jail $jail:"
+            pfctl -a /jail/$anchor -v -F all
             ;;
         restart)
-            jaildk_pf_ruleset $_conf stop  $_anchor $_jail
-            jaildk_pf_ruleset $_conf start $_anchor $_jail
+            pf_ruleset $conf stop  $anchor $jail
+            pf_ruleset $conf start $anchor $jail
             ;;
     esac
 }
 
-jaildk_pf_map() {
+pf_map() {
+    local extif proto eip eport mport ip v6
+
     extif=$1
     proto=$2
     eip=$3
@@ -284,7 +292,9 @@ jaildk_pf_map() {
     echo "rdr pass on $extif $v6 proto ${proto} from any to ${eip} port ${eport} -> ${ip} port ${mport}"
 }
 
-jaildk_pf_rule() {
+pf_rule() {
+    local extif proto eip eport v6
+
     extif=$1
     proto=$2
     eip=$3
@@ -294,7 +304,9 @@ jaildk_pf_rule() {
     echo "pass in quick on $extif $v6 proto ${proto} from any to ${eip} port ${eport}"
 }
 
-jaildk_pf_nat() {
+pf_nat() {
+    local extif srcip dstip v6
+
     extif=$1
     srcip=$2
     dstip=$3
@@ -303,7 +315,9 @@ jaildk_pf_nat() {
     echo "nat on $extif $v6 from $srcip to any -> $dstip"
 }
 
-jaildk_rc_pf() {
+rc_pf() {
+    local jail mode conf ruleset extif ipv4 anchor _proto _eport _mport _eports _eip
+
     jail=$1
     mode=$2
     conf=$j/etc/$jail/pf.conf
@@ -325,9 +339,9 @@ jaildk_rc_pf() {
 
             # we need to make sure the ip address doesn't contain a mask which
             # is not required for these rules
-            ip=$(dirname $ip)
+            ipv4=$(dirname $ip)
             
-            if test -n "$ip" -a -n "$maps"; then
+            if test -n "$ipv4" -a -n "$maps"; then
                 # nat and rdr come first
                 
                 # SAMPLE ruleset
@@ -363,21 +377,21 @@ jaildk_rc_pf() {
                             _mport=${_eport}
                         fi
                         echo "# from map $map" >> $ruleset
-                        jaildk_pf_map $extif ${_proto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
+                        pf_map $extif ${_proto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
                     fi
 
                     for port in ${_eports}; do
-                        jaildk_pf_map $extif ${_proto} ${_eip} ${port} ${port} ${ip} >> $ruleset
+                        pf_map $extif ${_proto} ${_eip} ${port} ${port} ${ip} >> $ruleset
                     done
                 done
             fi
 
             # masq_ip="123.12.12.33"
-            if test -n "$ip" -a -n "${masq_ip}"; then
-                jaildk_pf_nat $extif $ip ${masq_ip} >> $ruleset
+            if test -n "$ipv4" -a -n "${masq_ip}"; then
+                pf_nat $extif $ipv4 ${masq_ip} >> $ruleset
             fi
             
-            if test -n "$ip" -a -n "$rules"; then
+            if test -n "$ipv4" -a -n "$rules"; then
                 # rules="open web"
                 # only required for ipv6, ipv4 is already opened with exposed ports
                 # rule_open="any"
@@ -385,12 +399,12 @@ jaildk_rc_pf() {
                 # rule_web_port="80,443"
                 for rule in $rules; do
                     eval _proto=\${rule_${rule}_proto:-tcp}
-                    eval _port=\${rule_${rule}_port}
+                    eval _eport=\${rule_${rule}_port}
 
                     if test -n "${_port}"; then
                         if test -n "${ip6}"; then
                             echo "# from map $map" >> $ruleset
-                            jaildk_pf_rule $extif ${_proto} ${ip6} ${_port} inet6 >> $ruleset
+                            pf_rule $extif ${_proto} ${ip6} ${_eport} inet6 >> $ruleset
                         fi
                     else
                         echo "Warning: incomplete rule: $rule!"
@@ -403,16 +417,18 @@ jaildk_rc_pf() {
 
     if test -s $ruleset; then
         anchor="${jail}-jaildk"
-        jaildk_pf_ruleset $ruleset $mode $anchor $jail
+        pf_ruleset $ruleset $mode $anchor $jail
     fi
     
     if test -s $conf; then
         anchor="${jail}-custom"
-        jaildk_pf_ruleset $conf $mode $anchor $jail
+        pf_ruleset $conf $mode $anchor $jail
     fi
 }
 
-jaildk_rc_mtree() {
+rc_mtree() {
+    local jail mode base version rw conf
+
     jail=$1
     mode=$2
     base=$3
@@ -420,19 +436,27 @@ jaildk_rc_mtree() {
     rw=$5
     rcscript=mtree
 
-    if [ $mode = "start" ]; then  
-        if test -n "$rw"; then
-            run=$j/build/$jail/
-        else
-            run=$j/run/$jail/
-        fi
-        ex mtree -p $run -Ue -f $j/etc/$jail/mtree.conf | grep -v "extra:"
+    conf=$j/etc/$jail/$rcscript.conf
+
+    if test -s $conf; then
+        case mode in
+            start|restart)
+                if test -n "$rw"; then
+                    run=$j/build/$jail/
+                else
+                    run=$j/run/$jail/
+                fi
+                ex mtree -p $run -Ue -f $j/etc/$jail/mtree.conf | grep -v "extra:"
+                ;;
+        esac
     fi
 }
 
-jaildk_rc_rcoff() {
+rc_rcoff() {
     # avoid starting services inside the build chroot
-    # + jaildk_rc_rcoff db start 12.1-RELEASE-p10 20201026
+    # + rc_rcoff db start 12.1-RELEASE-p10 20201026
+    local jail mode base VERSION BASE rw
+
     jail=$1
     mode=$2
     BASE=$3
@@ -468,7 +492,9 @@ jaildk_rc_rcoff() {
     fi
 }
 
-jaildk_rc_ports() {
+rc_ports() {
+    local jail mode BASE VERSION rw
+
     jail=$1
     mode=$2
     BASE=$3
@@ -508,7 +534,10 @@ jaildk_rc_ports() {
     fi
 }
 
-jaildk_rc_mount() {
+rc_mount() {
+    local jail mode BASE VERSION rw conf run base version \
+          src dest fs opts size perm source
+
     jail=$1
     mode=$2
     BASE=$3
@@ -639,6 +668,8 @@ Available rc.d-scripts: $RCSCRIPTS_START"
 }
         
 jaildk_install() {
+    local jail mode rcd rw base version rcscripts type
+
     jail=$1
     mode=$2
     shift
@@ -693,7 +724,7 @@ jaildk_install() {
             esac
         fi
     else
-        rcscripts="jaildk_rc_${rcd}"
+        rcscripts="rc_${rcd}"
         if ! type "$rcscripts" > /dev/null 2>&1; then
             die "rc function $rcd doesn't exist!"
         fi
@@ -727,6 +758,8 @@ Uninstall <jail>. Options:
 
 jaildk_uninstall() {
     # wrapper around _install
+    local jail mode base version all rw
+
     jail=$1
     shift
     rw=''
@@ -788,6 +821,8 @@ Build a base directory from bsd install media. Options:
 }
 
 jaildk_base() {
+    local jail mode base force removelist basedir clean file rw
+
     base=""
     force=""
     rw=""
@@ -937,6 +972,8 @@ var/tmp"
 }
 
 clone() {
+    local srcdir dstdir
+
     srcdir=$1
     dstdir=$2
 
@@ -970,11 +1007,7 @@ Hints:
 }
 
 jaildk_clone() {
-    src=''
-    new=''
-    srcversion=''
-    newversion=''
-    update=''
+    local src new srcversion newversion update cloneto clonefrom fs srcmount dstmount opts size perm
 
     while getopts "s:d:o:n:" arg; do
         case $arg in
@@ -1088,7 +1121,8 @@ jaildk_clone() {
         echo
     else
         . $j/etc/$src/jail.conf
-        jail=$new
+        # FIXME: possibly not needed! see comment in jaildk_create()
+        # jail=$new
         bold "To mount the build chroot of the new jail, execute:"
         echo "jaildk build $new start -b $base -v $newversion"
     fi
@@ -1100,6 +1134,7 @@ Create a new jail from template."
 }
 
 jaildk_create() {
+    local jail newjail src srcversion newversion jailhostname
     jail=$1
     # $jail gets overwritten in jaildk_clone or some subcall to .template :-( ...
     newjail=$jail
@@ -1127,7 +1162,7 @@ jaildk_create() {
 }
 
 remove() {
-    dir=$1
+    local dir=$1
 
     if test -d $dir; then
         ex rm -rf $dir
@@ -1142,6 +1177,7 @@ Remove <jail> from disk."
 }
 
 jaildk_remove() {
+    local jail version
     jail=$1
     shift
     version=''
@@ -1212,8 +1248,10 @@ Show status of <jail>. Without <jail>, show status of all jails."
 
 
 jaildk_jail() {
-    jail=$2
+    local jail mode jid ip path runs build base _eip ip4addr osrelease path build
+    # FIXME: reversed argument order for historical reasons, maybe change this?
     mode=$1
+    jail=$2
 
     if test -z "$jail" -a $mode = "status"; then
         bold "Running jails:"
@@ -1289,6 +1327,7 @@ jaildk_jail() {
 }
 
 get_rc_scripts() {
+    local jail jaipath files rcvar
     jail="$1"
     jailpath=`get_jail_path $jail`
 
@@ -1309,6 +1348,8 @@ Execute an rc.d script inside <jail> with parameter <mode>. Options:
 }
 
 jaildk_rc() {
+    local jail mode rcd jailpath ok script jid
+
     jail=$1
     mode=$2
     shift
@@ -1364,12 +1405,12 @@ jaildk_rc() {
 }
 
 get_jail_path() {
-    jail="$1"
+    local jail="$1"
     echo "$(jls |grep -E "^ +[0-9]+  +[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ *${jail} +" | awk '{print $4}' | xargs basename)"
 }
 
 get_jid() {
-    jail="$1"
+    local jail="$1"
     echo "$(jls | grep -E  "^ +[0-9]+  +[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ *${jail} +" | awk '{print $1}' | xargs basename)"
 }
 
@@ -1383,6 +1424,8 @@ Mounted build chroot's:"
 }
 
 jaildk_blogin() {
+    local jail chroot file shell term home path
+
     jail=$1
 
     if test -z "$jail"; then
@@ -1427,6 +1470,8 @@ Available jails:"
 }
 
 jaildk_login() {
+    local jail user chroot file shell term home path me
+
     jail=$1
     user=$2
     me=`id -u` 
@@ -1481,11 +1526,10 @@ Stop, uninstall, install and start <jail>. If <base> and/or
 }
 
 jaildk_reinstall() {
+    local jail NEWBASE NEWVERSION ts change base version
+    
     jail=$1
     shift
-
-    NEWBASE=''
-    NEWVERSION=''
 
     while getopts "b:v:" arg; do
         case $arg in
@@ -1545,6 +1589,8 @@ jaildk_reinstall() {
 
 
 jaildk_setup() {
+    local j version subdir
+    
     j=$1
 
     if test -z "$j"; then
@@ -1664,7 +1710,7 @@ Fetch current portscollection, use <version> or todays timestamp as new version"
 }
 
 jaildk_fetchports() {
-    version=`date +%Y%m%d`
+    local version=`date +%Y%m%d`
 
     while getopts "v:" arg; do
         case $arg in
@@ -1679,15 +1725,15 @@ jaildk_fetchports() {
         case $yesno in
             y|Y|yes|YES)
                 ex rm -rf $j/ports/$version
-                jaildk_fetch_ports
+                fetch_ports
                 ;;
         esac
     else
-        jaildk_fetch_ports
+        fetch_ports
     fi
 }
 
-jaildk_fetch_ports() {
+fetch_ports() {
     ex mkdir -p $j/ports/tmp
     ex fetch -o $j/ports/tmp/ports.tar.gz http://ftp.freebsd.org/pub/FreeBSD/ports/ports/ports.tar.gz
     ex tar xzfC $j/ports/tmp/ports.tar.gz $j/ports/tmp
@@ -1705,15 +1751,21 @@ Options:
 }
 
 freeze_dir() {
+    local dstdir src srcdir layer layerfile
+
     dstdir=$1
     src=$2
     srcdir=$(echo $src | cut -d/ -f1)
     layer=$(echo $src | sed "s|$srcdir/||")
     layerfile=$(echo $layer | sed 's|/|-|g')
+
     ex tar -C $j/$srcdir -cpf $dstdir/$srcdir-$layerfile.tar $layer
 }
 
 jaildk_freeze() {
+    local jail VERSION ADDBASE ADDAPPL version host freeze tmp mountconf \
+          src dest fs opts size perm files
+    
     jail=$1
     shift
 
@@ -1768,7 +1820,7 @@ jaildk_freeze() {
 
     # create sub tarballs from every layer
     grep -v "#" $mountconf | while read LINE; do
-        # this is a copy of the code in jaildk_rc_mount()
+        # this is a copy of the code in rc_mount()
         # FIXME: put this into a function somehow
         set -- $(eval echo \""$LINE"\")
 
@@ -1820,6 +1872,8 @@ jaildk_freeze() {
 }
 
 thaw_tarball() {
+    local srcdir tarball layer
+
     srcdir=$1
     tarball=$2
 
@@ -1839,6 +1893,8 @@ usage_thaw() {
 }
 
 jaildk_thaw() {
+    local image j version jail tmp files bak
+
     image=$1
 
     if test -n "$J"; then
@@ -1916,6 +1972,8 @@ and you need to omit the 'ipfw add' of the command."
 }
 
 jaildk_ipfw() {
+    local jail mode
+
     jail=$1
     mode=$2
 
@@ -1928,11 +1986,11 @@ jaildk_ipfw() {
         bold "Managing IPFW Rules..."
         case $mode in
             start)
-                jaildk_ipfw_delete $jail "y"
-                jaildk_ipfw_add $jail
+                ipfw_delete $jail "y"
+                ipfw_add $jail
                 ;;
             stop)
-                jaildk_ipfw_delete $jail                
+                ipfw_delete $jail                
                 ;;
         esac
         bold "... done"
@@ -1940,19 +1998,30 @@ jaildk_ipfw() {
     fi
 }
 
-jaildk_ipfw_add() {
+ipfw_add() {
+    local jail ipv4 ipv6 rule
+
     jail=$1
 
     # support jail variables as well
     load-jail-config $jail
+
+    if test -z $ip; then
+        # Getting current jails IP..
+        ipv4=`jls -n -j $jail ip4.addr | cut -d= -f2`
+    else
+        ipv4=$ip
+    fi
     
-    # Getting current jails IP..
-    ip=`jls -n -j $jail ip4.addr | cut -d= -f2`
-    if test -z "$ip"; then
+    if test -z "$ipv4"; then
         die "Jail $jail doesn't have an ipv4 address!"
     fi
 
-    ip6=`jls -n -j $jail ip6.addr | cut -d= -f2` # optional, no checks
+    if test -z $ip6; then
+        ip6=`jls -n -j $jail ip6.addr | cut -d= -f2` # optional, no checks
+    else
+        ipv6=$ip6
+    fi
     
     # Adding rules
     egrep "^[a-z]" $j/etc/$jail/ipfw.conf | while read LINE; do
@@ -1962,42 +2031,44 @@ jaildk_ipfw_add() {
     done
 }
 
-jaildk_ipfw_delete() {
+ipfw_delete() {
+    local jail noout
+
     jail=$1
     noout=$2
-    # Deleting rules
+
     ipfw show | grep -E "// $jail\$" | while read rule; do [ -z "$2" ] && bold "Deleting rule $rule"; sh -c "ipfw delete $(echo $rule| awk '{print $1}')"; done
 
 }
 
 usage_vnet() {
-    echo "$0 vnet <jail> <mode> -b <bridge>"
-    echo "Configure VIMAGE (vnet) networking for a jail. Usually called from"
-    echo "jail.conf. You need to configure the bridge manually in advance."
-    echo
-    echo "You need the following in your /etc/rc.conf:"
-    echo "  cloned_interfaces=\"bridge0\""
-    echo "  ipv6_ifconfig_bridge0=\"2a01:...::1/80\""
-    echo "  ifconfig_bridge0=\"name jailsw0 up 172.20.20.1/24\""
-    echo "  ipv6_gateway_enable=\"YES\""
-    echo
-    echo "And something like this in your jail.conf:"
-    echo "  billa {"
-    echo "    vnet;"
-    echo "    exec.created = \"/jail/bin/jaildk vnet $name start -b jailsw0\";"
-    echo "    exec.prestop = \"/jail/bin/jaildk vnet $name stop -b vm-jailnet\";"
-    echo "  }"
-    echo
-    echo "Finally, the jail.conf for a vnet jail needs to contain these parameters:"
-    echo "  ip=172.20.20.10/24"
-    echo "  gw=172.20.20.1"
-    echo
-    echo "and if using v6 v6 address in bridge subet, gw6 is default gw => bridge interface"
-    echo "  ip6=2a01:.....ff"
-    echo "  gw6=2a01:.....1"
+    echo "$0 vnet <jail> <mode> -b <bridge>
+Configure VIMAGE (vnet) networking for a jail. Usually called from
+jail.conf. You need to configure the bridge manually in advance.
 
-    echo "You'll also need PF nat rules in order to be able to reach the outside"
-    echo "from the jail or vice versa."
+You need the following in your /etc/rc.conf:
+cloned_interfaces=\"bridge0\"
+  ipv6_ifconfig_bridge0=\"2a01:...::1/80\"
+  ifconfig_bridge0=\"name jailsw0 up 172.20.20.1/24\"
+  ipv6_gateway_enable=\"YES\"
+
+And something like this in your jail.conf:
+  billa {
+   vnet;
+   exec.created = \"/jail/bin/jaildk vnet $name start -b jailsw0\";
+   exec.prestop = \"/jail/bin/jaildk vnet $name stop -b vm-jailnet\";
+  }
+
+Finally, the jail.conf for a vnet jail needs to contain these parameters:
+  ip=172.20.20.10/24
+  gw=172.20.20.1
+
+and if using v6 v6 address in bridge subet, gw6 is default gw => bridge interface
+  ip6=2a01:.....ff
+  gw6=2a01:.....1
+
+You'll also need PF nat rules in order to be able to reach the outside
+from the jail or vice versa."
 
     exit
 }
@@ -2006,6 +2077,7 @@ jaildk_vnet() {
     #
     # This is no rc.d subcommand, but a standalone command, because it must
     # be executed by jail(8) via exec.created hook.
+    local jail mode BRIDGE vnethost vnetjail epairA epairB
     jail=$1
     mode=$2
     shift
@@ -2100,6 +2172,7 @@ Create, build and install a new jail with name <jail>. Options:
 jaildk_bootstrap() {
     # combines base, create and build functions into a oneshot command
     # to create a new jail
+    local jail BASE VERSION APPL PORTS IP loadbase RUN subdir port
     jail=$1
     shift
     
@@ -2217,10 +2290,10 @@ mustberoot() {
 JAILDIR=/jail
 
 # install modules
-RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree jaildk_rc_pf"
-RCSCRIPTS_STOP="jaildk_rc_pf jaildk_rc_mount jaildk_rc_ports"
-RW_RCSCRIPTS_START="jaildk_rc_mount jaildk_rc_ports jaildk_rc_mtree"
-RW_RCSCRIPTS_STOP="jaildk_rc_mount jaildk_rc_ports"
+RCSCRIPTS_START="rc_mount rc_ports rc_mtree rc_pf"
+RCSCRIPTS_STOP="rc_pf rc_mount rc_ports"
+RW_RCSCRIPTS_START="rc_mount rc_ports rc_mtree"
+RW_RCSCRIPTS_STOP="rc_mount rc_ports"
 
 # globals
 j=$JAILDIR
@@ -2250,7 +2323,7 @@ case $runner in
         ;;
     *)
         # every other management command, if it exists
-        if type "jaildk_$runner" 2> /dev/null; then
+        if type "jaildk_$runner" 2>&1 > /dev/null; then
             mustberoot
             jaildk_$runner $*
         else
