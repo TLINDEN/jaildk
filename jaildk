@@ -1385,7 +1385,7 @@ jaildk_rc() {
     fi
   
     rcs=`get_rc_scripts $jail`
-
+    
     jid=`get_jid $jail`
     jailpath=`get_jail_path $jail`
     if test $rcd = "all"; then
@@ -1414,12 +1414,12 @@ jaildk_rc() {
 
 get_jail_path() {
     local jail="$1"
-    echo "$(jls |grep -E "^ +[0-9]+  +[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ *${jail} +" | awk '{print $4}' | xargs basename)"
+    echo "$(jls |grep -E " ${jail} " | awk '{print $NF}' | xargs basename)"
 }
 
 get_jid() {
     local jail="$1"
-    echo "$(jls | grep -E  "^ +[0-9]+  +[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ *${jail} +" | awk '{print $1}' | xargs basename)"
+    echo "$(jls | grep -E  " ${jail} " | awk '{print $1}' | xargs basename)"
 }
 
 usage_blogin() {
