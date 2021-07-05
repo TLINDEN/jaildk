@@ -1248,17 +1248,25 @@ Show status of <jail>. Without <jail>, show status of all jails."
 
 
 jaildk_jail() {
-    local jail mode jid ip path runs build base _eip ip4addr osrelease path build
-    # FIXME: reversed argument order for historical reasons, maybe change this?
+    # reversed argument order here so that $jail is optional, in which
+    # case the command works on all jails
+    local jail mode jid ip path runs build base _eip ip4addr osrelease path build lookup
+
     mode=$1
     jail=$2
 
-    if test -z "$jail" -a $mode = "status"; then
-        bold "Running jails:"
+    if test -a $mode = "status"; then
+        bold "Running jail[s]:"
 
         (
+            if test -z "$jail"; then
+                lookup='*'
+            else
+                lookup=$jail
+            fi
+
             echo "Jail IP-Address Path Is-Running RW-mounted Current-Version Base"
-            grep -h "name=" $j/etc/*/jail.conf | cut -d= -f2 | while read jail; do
+            grep -h "name=" $j/etc/$lookup/jail.conf | cut -d= -f2 | while read jail; do
                 jid=''
                 ip=''
                 path=''
@@ -1309,15 +1317,15 @@ jaildk_jail() {
                 echo "$jail $ip $path $jid $build $version $osrelease"
             done
         ) | column -t
+
+        if test -n "$jail"; then
+            jaildk_rc $jail status
+        fi
     elif test -z "$jail"; then
         usage_$mode
     else
         bold "Jail $jail $mode:"
         case $mode in
-            status)
-                service jail $mode $jail | egrep "IP|$jail"
-                jaildk_rc $jail status
-                ;;
             *)
                 service jail $mode $jail
                 jaildk_ipfw $jail $mode
