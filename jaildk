@@ -1255,13 +1255,13 @@ jaildk_jail() {
     mode=$1
     jail=$2
 
-    if test -a $mode = "status"; then
-        bold "Running jail[s]:"
-
+    if test "x$mode" = "xstatus"; then
         (
             if test -z "$jail"; then
+                bold "Running jails:"
                 lookup='*'
             else
+                bold "Status $jail:"
                 lookup=$jail
             fi
 
