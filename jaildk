@@ -384,7 +384,7 @@ rc_pf() {
                             elif test -z "${mport}"; then
                                 mport=${port}
                             fi
-                            pf_map "$extif" "${proto}" "${eip}" "${port}" "${mport}" "${ip}" "${allowfrom}" >> $ruleset
+                            pf_map "$extif" "${proto}" "${eip}" "${port}" "${mport}" "${ipv4}" "${allowfrom}" >> $ruleset
                         done
                     fi
                 done
