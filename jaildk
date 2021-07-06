@@ -40,8 +40,10 @@ ${beg}Transferring Jails:${end}
 freeze <jail> [-a -b -v <version>]               - freeze (build an image of) a jail
 thaw <image>                                     - thaw (install) an image of a jail
 
-${beg}Getting help:${end}
+${beg}Getting help and internals:${end}
 help <command>                                   - request help on <command>
+version                                          - print program version
+update [-f]                                      - update jaildk from git repository
 
 EOF
 )
@@ -1709,6 +1711,60 @@ endif
             jaildk_base -b $j/base/$os
             ;;
     esac
+}
+
+jaildk_version() {
+    # parser friendly output
+    echo "This is jaildk.
+version=$version
+jailbase=$j
+"
+}
+
+usage_update() {
+    die "Usage $0 update [f]
+Update jaildk via git, needs internet access and git.
+Use -f to force the update ignoring the version check.
+"
+}
+
+jaildk_update() {
+    local repo gitversion force
+    rcscript=update
+    force=''
+
+    repo="https://github.com/TLINDEN/jaildk.git"
+    mustberoot
+
+    while getopts "f" arg; do
+        case $arg in
+            f) force=1;;
+            *) usage_update;;
+        esac
+    done
+    
+    if test -w $j; then
+        if ! test -d $j/git/jaildk; then
+            ex mkdir -p $j/git || die "Could not mkdir $j/git"
+            cd $j/git && ex git clone $repo || die "Could not clone $repo!"
+        else
+            cd $j/git/jaildk && ex git pull || die "Could not pull from $repo!"
+        fi
+
+        gitversion=$(egrep "^version=" $j/git/jaildk/jaildk | head -1 | cut -d= -f2)
+        if test -n "$gitversion"; then
+            if test 1 -eq $(echo "$gitversion > $version" | bc); then
+                echo "Updating jaildk from $version to version $gitversion..."
+                ex install -o root -g wheel $j/git/jaildk/jaildk $j/bin/jaildk || die "Failed to update self!"
+            else
+                die "jaildk git version unchanged, aborting"
+            fi
+        else
+            die "git version of jaildk in $j/git/jaildk/jaildk has no version!"
+        fi
+    else
+        die "directory $j must be writable!"
+    fi
 }
 
 usage_fetchports() {
