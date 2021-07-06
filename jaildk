@@ -1753,7 +1753,7 @@ jaildk_update() {
 
         gitversion=$(egrep "^version=" $j/git/jaildk/jaildk | head -1 | cut -d= -f2)
         if test -n "$gitversion"; then
-            if test 1 -eq $(echo "$gitversion > $version" | bc); then
+            if test 1 -eq $(echo "$gitversion > $version" | bc) -o -n "$force"; then
                 echo "Updating jaildk from $version to version $gitversion..."
                 ex install -o root -g wheel $j/git/jaildk/jaildk $j/bin/jaildk || die "Failed to update self!"
             else
