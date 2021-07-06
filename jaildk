@@ -289,9 +289,10 @@ pf_map() {
     eport=$4
     mport=$5
     ip=$6
-    v6=$7
+    from=$7
+    v6=$8
 
-    echo "rdr pass on $extif $v6 proto ${proto} from any to ${eip} port ${eport} -> ${ip} port ${mport}"
+    echo "rdr pass on $extif $v6 proto ${proto} from ${from} to ${eip} port ${eport} -> ${ip} port ${mport}"
 }
 
 pf_rule() {
@@ -318,7 +319,7 @@ pf_nat() {
 }
 
 rc_pf() {
-    local jail mode conf ruleset extif ipv4 anchor _proto _eport _mport _eports _eip
+    local jail mode conf ruleset extif ipv4 anchor proto eport mport eports eip allowfrom map port
 
     jail=$1
     mode=$2
@@ -352,39 +353,40 @@ rc_pf() {
                 # map_web_exposed_port=80
                 # map_web_mapped_port=8080
                 # map_web_exposed_ip="123.12.12.3"
+                # map_web_allow_from="any" # | ip | ip list | table
                 # map_ntp_proto="udp"
                 # map_ntp_exposed_port=123
                 # map_ntp_mapped_port=1234
                 # map_ntp_exposed_ip="123.12.12.33"
                 # map_kjk_proto="tcp"
-                # map_kjk_exposed_ports="1501 1502 1502" # maped 1:1
+                # map_kjk_exposed_port="1501 1502 1502}" # maped 1:1
                 # map_kjk_exposed_ip="123.12.12.33"
 
                 for map in $maps; do
                     # slurp in the values for this map
-                    eval _proto=\${map_${map}_proto:-tcp}
-                    eval _eport=\${map_${map}_exposed_port}
-                    eval _mport=\${map_${map}_mapped_port:-${_eport}}
-                    eval _eports=\${map_${map}_exposed_ports}
-                    eval _eip=\${map_${map}_exposed_ip:-$extif}
+                    eval proto=\${map_${map}_proto:-tcp}
+                    eval eport=\${map_${map}_exposed_port}
+                    eval mport=\${map_${map}_mapped_port:-"${eport}"}
+                    eval eip=\${map_${map}_exposed_ip:-$extif}
+                    eval allowfrom=\${map_${map}_allow_from:-any} # == from any|ips
 
-                    if test -z ${_eport} -o -z ${_eip}; then
+                    if test -z "${eport}" -o -z "${eip}"; then
                         echo "Warning: ignoring incomplete map: $map!"
                         continue
                     fi
 
-                    if test -n "${_eport}"; then
-                        if test -z "{_mport}"; then
-                            # map ports 1:1
-                            _mport=${_eport}
-                        fi
+                    if test -n "${eport}"; then
                         echo "# from map $map" >> $ruleset
-                        pf_map $extif ${_proto} ${_eip} ${_eport} ${_mport} ${ip} >> $ruleset
+                        for port in $eport; do
+                            if echo "${eport}" | grep -q " "; then
+                                # multiple eports, map 1:1
+                                mport=${port}
+                            elif test -z "${mport}"; then
+                                mport=${port}
+                            fi
+                            pf_map "$extif" "${proto}" "${eip}" "${port}" "${mport}" "${ip}" "${allowfrom}" >> $ruleset
+                        done
                     fi
-
-                    for port in ${_eports}; do
-                        pf_map $extif ${_proto} ${_eip} ${port} ${port} ${ip} >> $ruleset
-                    done
                 done
             fi
 
@@ -400,13 +402,13 @@ rc_pf() {
                 # rule_web_proto="tcp"
                 # rule_web_port="80,443"
                 for rule in $rules; do
-                    eval _proto=\${rule_${rule}_proto:-tcp}
-                    eval _eport=\${rule_${rule}_port}
+                    eval proto=\${rule_${rule}_proto:-tcp}
+                    eval eport=\${rule_${rule}_port}
 
-                    if test -n "${_port}"; then
+                    if test -n "${port}"; then
                         if test -n "${ip6}"; then
                             echo "# from map $map" >> $ruleset
-                            pf_rule $extif ${_proto} ${ip6} ${_eport} inet6 >> $ruleset
+                            pf_rule $extif ${proto} ${ip6} ${eport} inet6 >> $ruleset
                         fi
                     else
                         echo "Warning: incomplete rule: $rule!"
