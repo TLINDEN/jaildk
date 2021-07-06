@@ -1,3 +1,4 @@
 - vnet ipv6 doesnt work anymore
+  UPDATE: with auto_linklocal seems to work after some seconds
 - on reboot, no pf will be started
 - v6 addr on bridge in rc.conf is not applied on reboot
