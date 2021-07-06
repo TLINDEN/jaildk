@@ -319,7 +319,7 @@ pf_nat() {
 }
 
 rc_pf() {
-    local jail mode conf ruleset extif ipv4 anchor proto eport mport eports eip allowfrom map port
+    local jail mode conf ruleset extif ipv4 anchor proto eport mport eports eip allowfrom port
 
     jail=$1
     mode=$2
@@ -2205,7 +2205,7 @@ jaildk_vnet() {
             if test -n "$ip6" -a -n "$gw6"; then
                 if ! jexec $jail ifconfig $vnetjail inet6 | grep -v fe80 | grep prefixlen > /dev/null 2>&1; then
                     # configure the jail v4 network stack inside the jail
-                    ex jexec $jail ifconfig $vnetjail inet6 $ip6 || true
+                    ex jexec $jail ifconfig $vnetjail inet6 $ip6 auto_linklocal || true
                     ex jexec $jail route -6 add default $gw6 || true
                 fi
             fi
