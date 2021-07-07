@@ -343,6 +343,7 @@ rc_pf() {
             # we need to make sure the ip address doesn't contain a mask which
             # is not required for these rules
             ipv4=$(dirname $ip)
+            ipv6=$(dirname $ip6)
             
             if test -n "$ipv4" -a -n "$maps"; then
                 # nat and rdr come first
@@ -395,9 +396,9 @@ rc_pf() {
                 pf_nat $extif $ipv4 ${masq_ip} >> $ruleset
             fi
             
-            if test -n "$ipv4" -a -n "$rules"; then
-                # rules="open web"
+            if test -n "$ip6" -a -n "$rules"; then
                 # only required for ipv6, ipv4 is already opened with exposed ports
+                # rules="open web"
                 # rule_open="any"
                 # rule_web_proto="tcp"
                 # rule_web_port="80,443"
@@ -406,10 +407,8 @@ rc_pf() {
                     eval eport=\${rule_${rule}_port}
 
                     if test -n "${port}"; then
-                        if test -n "${ip6}"; then
-                            echo "# from map $map" >> $ruleset
-                            pf_rule $extif ${proto} ${ip6} ${eport} inet6 >> $ruleset
-                        fi
+                        echo "# from map $map" >> $ruleset
+                        pf_rule $extif ${proto} ${ipv6} ${eport} inet6 >> $ruleset
                     else
                         echo "Warning: incomplete rule: $rule!"
                         continue
