@@ -64,6 +64,7 @@ usage_help() {
 
 ex() {
     echo $rcscript - $*
+    logger -p local0.notice -t jaildk "$rcscript $*"
     $*
 }
 
