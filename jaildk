@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.22
+version=1.23
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -291,7 +291,7 @@ pf_map() {
     mport=$5
     ip=$6
     from=$7
-    v6=$8
+    v6=${8:-inet}
 
     echo "rdr pass on $extif $v6 proto ${proto} from ${from} to ${eip} port ${eport} -> ${ip} port ${mport}"
 }
