@@ -989,7 +989,11 @@ clone() {
         if test $srcdir = $dstdir; then
             echo "$srcdir == $dstdir, ignored"
         else
-            ex cpdup -x $srcdir $dstdir
+            if test -d $dstdir; then
+                echo "$dstdir already exists, ignored"
+            else
+                echo cpdup -x $srcdir $dstdir
+            fi
         fi
     else
         echo "$srcdir doesn't exist, ignored"
@@ -1306,7 +1310,6 @@ jaildk_jail() {
                     jid="yes,jid=$jid"
                 else
                     jid="no"
-                    osrelease=$base
                     path=$j/run/$jail
                     if test -z "$ip"; then
                         ip="n/a"
@@ -1317,7 +1320,7 @@ jaildk_jail() {
                     build='yes'
                 fi
 
-                echo "$jail $ip $path $jid $build $version $osrelease"
+                echo "$jail $ip $path $jid $build $version $base"
             done
         ) | column -t
 
