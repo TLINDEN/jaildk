@@ -982,17 +982,13 @@ clone() {
     dstdir=$2
 
     if test -d $srcdir; then
-        if ! test -d $dstdir; then
-            mkdir -p $dstdir
-        fi
-
         if test $srcdir = $dstdir; then
             echo "$srcdir == $dstdir, ignored"
         else
             if test -d $dstdir; then
                 echo "$dstdir already exists, ignored"
             else
-                echo cpdup -x $srcdir $dstdir
+                ex cpdup -x $srcdir $dstdir
             fi
         fi
     else
