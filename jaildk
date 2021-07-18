@@ -989,10 +989,10 @@ clone() {
         if test $srcdir = $dstdir; then
             echo "$srcdir == $dstdir, ignored"
         else
-            if test -d $dstdir; then
-                echo "$dstdir already exists, ignored"
+            if test "$(ls -l $dstdir)" = "total 0"; then
+                ex cpdup -x $srcdir $dstdir
             else
-                echo cpdup -x $srcdir $dstdir
+                echo "$dstdir already exists, ignored"
             fi
         fi
     else
