@@ -443,7 +443,7 @@ rc_mtree() {
     conf=$j/etc/$jail/$rcscript.conf
 
     if test -s $conf; then
-        case mode in
+        case $mode in
             start|restart)
                 if test -n "$rw"; then
                     run=$j/build/$jail/
