@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.23
+version=1.24
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -17,12 +17,13 @@ create                                           - create a new jail from a temp
 clone -s <src> -d <dst> [-o <v>] [-n <v>]        - clone an existing jail or jail version
 fetchports [-v <version>]                        - fetch current port collection
 
-${beg}Installing Jails:${end}
+${beg}(Un)installing Jails:${end}
 install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
 uninstall <jail> [-w]                            - uninstall a jail
 remove <jail>                                    - remove a jail or a jail version
 reinstall <jail> [-b <base>] [-v <version>]      - stop, remove, install and start a jail, if
                                                    -b and/or -v is set, update the jail config
+prunt [-b | -a | -j <jail>                       - display unused directories
 
 ${beg}Maintaining Jails:${end}
 start <jail>                                     - start a jail
@@ -2228,6 +2229,83 @@ jaildk_vnet() {
     esac    
 }
 
+usage_prune() {
+    echo "$0 prune [-b | -a | -j]
+List unused directories. Important: ALL jails must be running while
+executing this command! Options:
+-b         list active and unused bases
+-a         list active and unused appls
+-j <jail>  list version and unused jail specific directories for <jail>
+-u         only list unused dirs
+
+Use the option -u to omit active dirs and '|xargs rm -rf' to actually
+delete directories. Be sure to have backups available!
+"
+}
+
+jaildk_prune() {
+    local BASE APPL JAIL UNUSED
+
+    while getopts "baj:u" arg; do
+        case $arg in
+            b) BASE=1;;
+            a) APPL=1;;
+            j) JAIL=${OPTARG};;
+            u) UNUSED=1;;
+            *) usage_bootstrap;;
+        esac
+    done
+
+    dirs="/tmp/jaildk-$$-dirs"
+
+    if test -n "$BASE"; then
+        (
+            mount | grep /base/ | cut -d' ' -f1
+            ls -1d /jail/base/*
+        ) > $dirs
+
+        if test -z "$UNUSED"; then
+            bold "Active BASE mounts:" > /dev/stderr
+            cat $dirs | sort -V | uniq -c | grep -v " 1" | awk '{print $2}'
+            echo
+        fi
+
+        bold "Unused BASE mounts (be aware of build mounts!):" > /dev/stderr
+        cat $dirs | sort -V | uniq -c | grep " 1" | awk '{print $2}'
+
+        rm -f $dirs
+
+    elif test -n "$APPL"; then
+        (
+            mount | grep /appl/ | cut -d' ' -f1
+            ls -1d /jail/appl/*
+        ) > $dirs
+
+        if test -z "$UNUSED"; then
+            bold "Active APPL mounts:" > /dev/stderr
+            cat $dirs | sort -V | uniq -c | grep -v " 1" | awk '{print $2}'
+            echo
+        fi
+
+        bold "Unused APPL mounts:" > /dev/stderr
+        cat $dirs | sort -V | uniq -c | grep " 1" | awk '{print $2}'
+
+        rm -f $dirs
+
+    elif test -n "$JAIL"; then
+        die_if_not_exist $JAIL
+        load-jail-config $JAIL
+
+        if test -z "$UNUSED"; then
+            bold "Current Active jail version for jail $JAIL:" > /dev/stderr
+            echo $version; echo
+        fi
+
+        bold "Unused jail specific mounts for jail $JAIL:" > /dev/stderr
+        ls -1d $j/etc/$JAIL/*[0-1]* $j/log/$JAIL-*[0-1]* $j/home/$JAIL/*[0-1]* | grep -v $version | sort -V
+    fi
+}
+
 usage_bootstrap() {
     echo "$0 bootstrap <jail> [-b <base>] [-v <version>] [-p <port,...>] [-a <appl>] [-i <ip,..>]
 Create, build and install a new jail with name <jail>. Options:
@@ -2253,13 +2331,13 @@ jaildk_bootstrap() {
     PORTS=''
     IP=''
 
-    while getopts "b:v:p:a:" arg; do
+    while getopts "i:b:v:p:a:" arg; do
         case $arg in
             b) BASE=${OPTARG};;
             v) VERSION=${OPTARG};;
             p) PORTS=${OPTARG};;
             a) APPL=${OPTARG};;
-            i) IP==${OPTARG};;
+            i) IP=${OPTARG};;
             *) usage_bootstrap;;
         esac
     done
