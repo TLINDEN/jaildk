@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.24
+version=1.25
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -408,8 +408,8 @@ rc_pf() {
                     eval proto=\${rule_${rule}_proto:-tcp}
                     eval eport=\${rule_${rule}_port}
 
-                    if test -n "${port}"; then
-                        echo "# from map $map" >> $ruleset
+                    if test -n "${eport}"; then
+                        echo "# from rule $rule" >> $ruleset
                         pf_rule $extif ${proto} ${ipv6} ${eport} inet6 >> $ruleset
                     else
                         echo "Warning: incomplete rule: $rule!"
