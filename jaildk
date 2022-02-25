@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.25
+version=1.26
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -2120,15 +2120,15 @@ jail.conf. You need to configure the bridge manually in advance.
 
 You need the following in your /etc/rc.conf:
 cloned_interfaces=\"bridge0\"
-  ipv6_ifconfig_bridge0=\"2a01:...::1/80\"
-  ifconfig_bridge0=\"name jailsw0 up 172.20.20.1/24\"
+  ifconfig_bridge0=\"inet 172.20.20.1/24 up\"
+  ifconfig_bridge0_ipv6=\"2a01:...:1e::1/80 auto_linklocal\"
   ipv6_gateway_enable=\"YES\"
 
 And something like this in your jail.conf:
   billa {
    vnet;
-   exec.created = \"/jail/bin/jaildk vnet $name start -b jailsw0\";
-   exec.prestop = \"/jail/bin/jaildk vnet $name stop -b vm-jailnet\";
+   exec.poststart = \"/jail/bin/jaildk vnet $name start -b jailsw0\";
+   exec.prestop   = \"/jail/bin/jaildk vnet $name stop  -b jailsw0\";
   }
 
 Finally, the jail.conf for a vnet jail needs to contain these parameters:
@@ -2211,8 +2211,9 @@ jaildk_vnet() {
 
             if test -n "$ip6" -a -n "$gw6"; then
                 if ! jexec $jail ifconfig $vnetjail inet6 | grep -v fe80 | grep prefixlen > /dev/null 2>&1; then
-                    # configure the jail v4 network stack inside the jail
-                    ex jexec $jail ifconfig $vnetjail inet6 $ip6 auto_linklocal || true
+                    # configure the jail v6 network stack inside the jail
+                    ex jexec $jail ifconfig $vnetjail inet6 $ip6 || true
+                    ex jexec $jail ifconfig $vnetjail inet6 -ifdisabled accept_rtadv auto_linklocal|| true
                     ex jexec $jail route -6 add default $gw6 || true
                 fi
             fi
