@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=1.26
+version=1.28
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -23,7 +23,7 @@ uninstall <jail> [-w]                            - uninstall a jail
 remove <jail>                                    - remove a jail or a jail version
 reinstall <jail> [-b <base>] [-v <version>]      - stop, remove, install and start a jail, if
                                                    -b and/or -v is set, update the jail config
-prunt [-b | -a | -j <jail>                       - display unused directories
+prune [-b | -a | -j <jail>                       - display unused directories
 
 ${beg}Maintaining Jails:${end}
 start <jail>                                     - start a jail
@@ -340,82 +340,82 @@ rc_pf() {
                 # generate a pf.conf based on config variables
                 echo "# generated pf ruleset for jail, generated on ` date`" > $ruleset
                 extif=$(netstat -rnfinet | grep default | cut -f4 -w)
-            fi
 
-            # we need to make sure the ip address doesn't contain a mask which
-            # is not required for these rules
-            ipv4=$(dirname $ip)
-            ipv6=$(dirname $ip6)
+                # we need to make sure the ip address doesn't contain a mask which
+                # is not required for these rules
+                ipv4=$(dirname $ip)
+                ipv6=$(dirname $ip6)
             
-            if test -n "$ipv4" -a -n "$maps"; then
-                # nat and rdr come first
+                if test -n "$ipv4" -a -n "$maps"; then
+                    # nat and rdr come first
                 
-                # SAMPLE ruleset
-                # maps="web ntp kjk"
-                # map_web_proto="tcp"
-                # map_web_exposed_port=80
-                # map_web_mapped_port=8080
-                # map_web_exposed_ip="123.12.12.3"
-                # map_web_allow_from="any" # | ip | ip list | table
-                # map_ntp_proto="udp"
-                # map_ntp_exposed_port=123
-                # map_ntp_mapped_port=1234
-                # map_ntp_exposed_ip="123.12.12.33"
-                # map_kjk_proto="tcp"
-                # map_kjk_exposed_port="1501 1502 1502}" # maped 1:1
-                # map_kjk_exposed_ip="123.12.12.33"
+                    # SAMPLE ruleset
+                    # maps="web ntp kjk"
+                    # map_web_proto="tcp"
+                    # map_web_exposed_port=80
+                    # map_web_mapped_port=8080
+                    # map_web_exposed_ip="123.12.12.3"
+                    # map_web_allow_from="any" # | ip | ip list | table
+                    # map_ntp_proto="udp"
+                    # map_ntp_exposed_port=123
+                    # map_ntp_mapped_port=1234
+                    # map_ntp_exposed_ip="123.12.12.33"
+                    # map_kjk_proto="tcp"
+                    # map_kjk_exposed_port="1501 1502 1502}" # maped 1:1
+                    # map_kjk_exposed_ip="123.12.12.33"
 
-                for map in $maps; do
-                    # slurp in the values for this map
-                    eval proto=\${map_${map}_proto:-tcp}
-                    eval eport=\${map_${map}_exposed_port}
-                    eval mport=\${map_${map}_mapped_port:-"${eport}"}
-                    eval eip=\${map_${map}_exposed_ip:-$extif}
-                    eval allowfrom=\${map_${map}_allow_from:-any} # == from any|ips
+                    for map in $maps; do
+                        # slurp in the values for this map
+                        eval proto=\${map_${map}_proto:-tcp}
+                        eval eport=\${map_${map}_exposed_port}
+                        eval mport=\${map_${map}_mapped_port:-"${eport}"}
+                        eval eip=\${map_${map}_exposed_ip:-$extif}
+                        eval allowfrom=\${map_${map}_allow_from:-any} # == from any|ips
+                        
+                        if test -z "${eport}" -o -z "${eip}"; then
+                            echo "Warning: ignoring incomplete map: $map!"
+                            continue
+                        fi
 
-                    if test -z "${eport}" -o -z "${eip}"; then
-                        echo "Warning: ignoring incomplete map: $map!"
-                        continue
-                    fi
+                        if test -n "${eport}"; then
+                            echo "# from map $map" >> $ruleset
+                            for port in $eport; do
+                                if echo "${eport}" | grep -q " "; then
+                                    # multiple eports, map 1:1
+                                    mport=${port}
+                                elif test -z "${mport}"; then
+                                    mport=${port}
+                                fi
+                                pf_map "$extif" "${proto}" "${eip}" "${port}" "${mport}" "${ipv4}" "${allowfrom}" >> $ruleset
+                            done
+                        fi
+                    done
+                fi
 
-                    if test -n "${eport}"; then
-                        echo "# from map $map" >> $ruleset
-                        for port in $eport; do
-                            if echo "${eport}" | grep -q " "; then
-                                # multiple eports, map 1:1
-                                mport=${port}
-                            elif test -z "${mport}"; then
-                                mport=${port}
-                            fi
-                            pf_map "$extif" "${proto}" "${eip}" "${port}" "${mport}" "${ipv4}" "${allowfrom}" >> $ruleset
-                        done
-                    fi
-                done
-            fi
-
-            # masq_ip="123.12.12.33"
-            if test -n "$ipv4" -a -n "${masq_ip}"; then
-                pf_nat $extif $ipv4 ${masq_ip} >> $ruleset
-            fi
+                # masq_ip="123.12.12.33"
+                if test -n "$ipv4" -a -n "${masq_ip}"; then
+                    pf_nat $extif $ipv4 ${masq_ip} >> $ruleset
+                fi
             
-            if test -n "$ip6" -a -n "$rules"; then
-                # only required for ipv6, ipv4 is already opened with exposed ports
-                # rules="open web"
-                # rule_open="any"
-                # rule_web_proto="tcp"
-                # rule_web_port="80,443"
-                for rule in $rules; do
-                    eval proto=\${rule_${rule}_proto:-tcp}
-                    eval eport=\${rule_${rule}_port}
+                if test -n "$ip6" -a -n "$rules"; then
+                    # only required for ipv6, ipv4 is already opened with exposed ports
+                    # rules="open web"
+                    # rule_open="any"
+                    # rule_web_proto="tcp"
+                    # rule_web_port="80,443"
+                    for rule in $rules; do
+                        eval proto=\${rule_${rule}_proto:-tcp}
+                        eval eport=\${rule_${rule}_port}
 
-                    if test -n "${eport}"; then
-                        echo "# from rule $rule" >> $ruleset
-                        pf_rule $extif ${proto} ${ipv6} ${eport} inet6 >> $ruleset
-                    else
-                        echo "Warning: incomplete rule: $rule!"
-                        continue
-                    fi
-                done
+                        if test -n "${eport}"; then
+                            echo "# from rule $rule" >> $ruleset
+                            pf_rule $extif ${proto} ${ipv6} ${eport} inet6 >> $ruleset
+                        else
+                            echo "Warning: incomplete rule: $rule!"
+                            continue
+                        fi
+                    done
+                fi
             fi
             ;;
     esac
