@@ -156,6 +156,10 @@ Download the file `jaildk` or clone this repository to your FreeBSD server and e
 This will create the directory structure required for the tool itself,
 create a template jail and build a base directory.
 
+## Bash Completion
+
+If you want to use `jaildk` with bash completion, source the script `jaildk-completion.bash`.
+
 ## Basic usage
 
 Let's say you installed *jaildk* into `/jail` and you want to create a
