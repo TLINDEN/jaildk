@@ -1,4 +1,4 @@
-## jaildk - a FreeBSD jail development kit
+## jaildk - a FreeBSD jail development kit v2.0.0
 
 This is  the README for the  FreeBSD jail utility `jaildk`.  It can be
 used to build, update, manage and run jails in a versioned environment.
@@ -112,53 +112,72 @@ handy wrappers to make live easier.
 
 For an overview of the provided commands, here's the usage screen:
 ```
-Usage: /usr/local/bin/jaildk <command> <mode-args>
+Usage: ./jaildk <command> <command-args>
 
 Building Jails:
-base -b <name> [-w]                              - build a new base
-build <jail> <mode> [-b <base>] [-v <version>]   - install a build chroot of a jail
-create                                           - create a new jail from a template
-clone -s <src> -d <dst> [-o <v>] [-n <v>]        - clone an existing jail or jail version
-fetch                                            - fetch current port collection
+base -b <name> [-w]                               - build a new base
+build <jail> -m <mode> [-b <base>] [-v <version>] - install a build chroot of a jail
+create                                            - create a new jail from a template
+clone -s <src> -d <dst> [-o <v>] [-n <v>]         - clone an existing jail or jail version
+fetchports [-v <version>]                         - fetch current port collection
 
-Installing Jails:
-install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
-uninstall <jail> [-w]                            - uninstall a jail
-remove <jail>                                    - remove a jail or a jail version
-reinstall <jail>                                 - stop, remove, install and start a jail
+(Un)installing Jails:
+install <jail> -m <mode> [-r function]            - install a jail (prepare mounts, devfs etc)
+uninstall <jail> [-w]                             - uninstall a jail
+remove <jail>                                     - remove a jail or a jail version
+reinstall <jail> [-b <base>] [-v <version>]       - stop, remove, install and start a jail, if
+                                                    -b and/or -v is set, update the jail config
+prune [-b | -a | -j <jail>                        - display unused directories
 
 Maintaining Jails:
-start <jail>                                     - start a jail
-stop <jail>                                      - stop a jail
-restart <jail>                                   - restart a jail
-status [<jail>]                                  - display a jail's status
-rc <jail> <mode> [-r <rc.d script>]              - execute an rc-script inside a jail
+start <jail>                                      - start a jail
+stop <jail>                                       - stop a jail
+restart <jail>                                    - restart a jail
+status [<jail>] [-v]                              - display status of jails or <jail>
+rc <jail> -m <mode> [-r <rc.d script>]            - execute an rc-script inside a jail
+ipfw <jail> -m <mode>                             - add or remove ipfw rules
 
 Managing Jails:
-login <jail> [<user>]                            - login into a jail
-blogin <jail>                                    - chroot into a build jail
+login <jail> [<user>]                             - login into a jail
+blogin <jail>                                     - chroot into a build jail
 
 Transferring Jails:
-freeze <jail> [-a -b -v <version>]               - freeze (build an image of) a jail
-thaw <image>                                     - thaw (install) an image of a jail
+freeze <jail> [-a -b -v <version>]                - freeze (build an image of) a jail
+thaw <image>                                      - thaw (install) an image of a jail
 
-Getting help:
-help <command>                                   - request help on <command>
+Getting help and internals:
+completion                                        - print completion code. to use execute in a bash:
+                                                    source <(jaildk completion)
+help <command>                                    - request help on <command>
+version                                           - print program version
+update [-f]                                       - update jaildk from git repository
 ```
 
 ## Installation
 
-Download the file `jaildk` or clone this repository to your FreeBSD server and execute the following command:
+Clone this repository to your FreeBSD server and execute the following command:
 ```
-./jaildk setup <directory>
+make
+make install
 ```
 
 This will create the directory structure required for the tool itself,
-create a template jail and build a base directory.
+create a  template jail and build  a base directory. The  default base
+directory is `/jail`. You can modify this by issuing:
+```
+make install JAILDIR=/another/dir
+```
+
+Be aware,  that the `jaildk` script  itself will only be  installed to
+`$JAILDIR/bin/jaildk`.  Either put  this directory  into your  `$PATH`
+variable or create a symlink to the script in some bin dir.
 
 ## Bash Completion
 
-If you want to use `jaildk` with bash completion, source the script `jaildk-completion.bash`.
+If you want to use `jaildk` with bash completion, put this line into your `.bashrc`:
+```
+source <(jaildk completion)
+```
 
 ## Basic usage
 
@@ -325,7 +344,7 @@ mount - mount -t nullfs -o rw /jail/home/myjail/root-20201106 /jail/run/myjail/r
 Jail myjail start:
 Starting jails: myjail.
 
-# jaildk startus myjail
+# jaildk status myjail
 Jail scipown status:
  JID             IP Address      Hostname                      Path
  myjail          172.16.1.1      myjail                        /jail/run/myjail
@@ -363,7 +382,7 @@ jaildk clone -s myjail -d myjail -o 20201106 -n 20210422
 
 Mount the build chroot for the new version:
 ```
-jaildk build myjail start -b `uname -r` -v 20210422
+jaildk build myjail -m start -b `uname -r` -v 20210422
 ```
 
 And finally chroot into the new jail and update it:

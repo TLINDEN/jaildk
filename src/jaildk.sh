@@ -1,6 +1,17 @@
 #!/bin/sh
 
-version=1.28
+version=2.0.0
+
+# this will  be completed during  build. Don't touch it,  just execute
+# make and use the resulting script!
+JAILDK_COMPLETION=$(
+cat<<'EOF'
+# will be modified during installation (jaildk setup)
+JAILDIR=/jail
+
+COMPLETIONCODE
+EOF
+)
 
 usage_jaildk() {
     beg=`tput -T ${TERM:-cons25} md`
@@ -8,43 +19,45 @@ usage_jaildk() {
     usage=$(cat <<EOF
 This is jaildk version $version, a jail management toolkit.
 
-Usage: $0 <command> <mode-args>
+Usage: $0 <command> <command-args>
 
 ${beg}Building Jails:${end}
-base -b <name> [-w]                              - build a new base
-build <jail> <mode> [-b <base>] [-v <version>]   - install a build chroot of a jail
-create                                           - create a new jail from a template
-clone -s <src> -d <dst> [-o <v>] [-n <v>]        - clone an existing jail or jail version
-fetchports [-v <version>]                        - fetch current port collection
+base -b <name> [-w]                               - build a new base
+build <jail> -m <mode> [-b <base>] [-v <version>] - install a build chroot of a jail
+create                                            - create a new jail from a template
+clone -s <src> -d <dst> [-o <v>] [-n <v>]         - clone an existing jail or jail version
+fetchports [-v <version>]                         - fetch current port collection
 
 ${beg}(Un)installing Jails:${end}
-install <jail> <mode> [-r function]              - install a jail (prepare mounts, devfs etc)
-uninstall <jail> [-w]                            - uninstall a jail
-remove <jail>                                    - remove a jail or a jail version
-reinstall <jail> [-b <base>] [-v <version>]      - stop, remove, install and start a jail, if
-                                                   -b and/or -v is set, update the jail config
-prune [-b | -a | -j <jail>                       - display unused directories
+install <jail> -m <mode> [-r function]            - install a jail (prepare mounts, devfs etc)
+uninstall <jail> [-w]                             - uninstall a jail
+remove <jail>                                     - remove a jail or a jail version
+reinstall <jail> [-b <base>] [-v <version>]       - stop, remove, install and start a jail, if
+                                                    -b and/or -v is set, update the jail config
+prune [-b | -a | -j <jail>                        - display unused directories
 
 ${beg}Maintaining Jails:${end}
-start <jail>                                     - start a jail
-stop <jail>                                      - stop a jail
-restart <jail>                                   - restart a jail
-status [<jail>] [-v]                             - display status of jails or <jail>
-rc <jail> <mode> [-r <rc.d script>]              - execute an rc-script inside a jail
-ipfw <jail> <mode>                               - add or remove ipfw rules
+start <jail>                                      - start a jail
+stop <jail>                                       - stop a jail
+restart <jail>                                    - restart a jail
+status [<jail>] [-v]                              - display status of jails or <jail>
+rc <jail> -m <mode> [-r <rc.d script>]            - execute an rc-script inside a jail
+ipfw <jail> -m <mode>                             - add or remove ipfw rules
 
 ${beg}Managing Jails:${end}
-login <jail> [<user>]                            - login into a jail
-blogin <jail>                                    - chroot into a build jail
+login <jail> [<user>]                             - login into a jail
+blogin <jail>                                     - chroot into a build jail
 
 ${beg}Transferring Jails:${end}
-freeze <jail> [-a -b -v <version>]               - freeze (build an image of) a jail
-thaw <image>                                     - thaw (install) an image of a jail
+freeze <jail> [-a -b -v <version>]                - freeze (build an image of) a jail
+thaw <image>                                      - thaw (install) an image of a jail
 
 ${beg}Getting help and internals:${end}
-help <command>                                   - request help on <command>
-version                                          - print program version
-update [-f]                                      - update jaildk from git repository
+completion                                        - print completion code. to use execute in a bash:
+                                                    source <(jaildk completion)
+help <command>                                    - request help on <command>
+version                                           - print program version
+update [-f]                                       - update jaildk from git repository
 
 EOF
 )
@@ -184,38 +197,35 @@ parse_jail_conf() {
 
 
 usage_build() {
-    fin "Usage: $0 build <jail> [<start|stop|status>] [-b <base>] [-v <version>]
+    fin "Usage: $0 build <jail> [-m <start|stop|status>] [-b <base>] [-v <version>]
 Mount <jail> to $j/build read-writable for maintenance. Options:
 -b <base>     Use specified <base>. default: use configured base.
 -v <version>  Mount <version> of <jail>.
-<mode>        One of start, stop or status. default: start."
+-m <mode>     One of start, stop or status. default: start."
 }
 
 jaildk_build() {
     local jail mode BASE VERSION base version
 
     jail=$1
-    mode=$2
+    mode=start
     shift
     shift
     
     BASE=''
     VERSION=''
 
-    while getopts "b:v:" arg; do
+    while getopts "b:v:m:" arg; do
         case $arg in
             b) BASE=${OPTARG};;
             v) VERSION=${OPTARG};;
+            m) mode=${OPTARG};;
             *) usage_build;;
         esac
     done
 
     if test -z "$jail"; then
         usage_build
-    fi
-
-    if test -z "$mode"; then
-        mode=start
     fi
 
     die_if_not_exist $jail $VERSION
@@ -240,7 +250,7 @@ jaildk_build() {
     fi
 
     # install the jail to build/
-    jaildk_install $jail $mode -r all -w -b $base -v $version
+    jaildk_install $jail -m $mode -r all -w -b $base -v $version
 
     case $mode in
         start)
@@ -667,9 +677,9 @@ rc_mount() {
 
 
 usage_install() {
-    fin "Usage: $0 install <jail> [<mode>] [-r rc-function]
+    fin "Usage: $0 install <jail> [-m <mode>] [-r rc-function]
 Install <jail> according to its config. Options:
-<mode>          Mode can either be start, stop or status. default: start
+-m <mode>       Mode can either be start, stop or status. default: start
 -r <function>   Only execute function with <mode> parameter. default: all.
 
 Available rc.d-scripts: $RCSCRIPTS_START"
@@ -679,8 +689,7 @@ jaildk_install() {
     local jail mode rcd rw base version rcscripts type
 
     jail=$1
-    mode=$2
-    shift
+    mode=start
     shift
     rcd=''
 
@@ -689,22 +698,19 @@ jaildk_install() {
     base=''
     version=''
 
-    while getopts "r:b:v:w" arg; do
+    while getopts "r:b:v:wm:" arg; do
         case $arg in
             w) rw=1;;
             b) base=${OPTARG};;
             v) version=${OPTARG};;
             r) rcd=${OPTARG};;
+            m) mode=${OPTARG};;
             *) usage_install;;
         esac
     done
 
     if test -z "$jail"; then
         usage_install
-    fi
-
-    if test -z "$mode"; then
-        mode=start
     fi
 
     if test -z "$rcd"; then
@@ -808,10 +814,10 @@ jaildk_uninstall() {
     fi
 
     if test -n "$all"; then
-        jaildk_install $jail stop -r all
-        jaildk_install $jail stop -r all -b $base -v $version -w
+        jaildk_install $jail -m stop -r all
+        jaildk_install $jail -m stop -r all -b $base -v $version -w
     else
-        jaildk_install $jail stop -r all -b $base -v $version $rw
+        jaildk_install $jail -m stop -r all -b $base -v $version $rw
     fi
 }
 
@@ -1329,7 +1335,7 @@ jaildk_jail() {
         ) | column -t
 
         if test -n "$jail"; then
-            jaildk_rc $jail status
+            jaildk_rc $jail -m status
         fi
     elif test -z "$jail"; then
         usage_$mode
@@ -1345,14 +1351,19 @@ jaildk_jail() {
 }
 
 get_rc_scripts() {
-    local jail jaipath files rcvar
+    local jail jailpath files rcvar name
     jail="$1"
     jailpath=`get_jail_path $jail`
 
     files=$(ls $j/run/$jailpath/usr/local/etc/rc.d/* $j/run/$jailpath/etc/rc.d/* 2>/dev/null)
 
     rcorder $files 2>/dev/null | while read SCRIPT; do
+        # we need to fetch the rcvar variable. sometimes these scripts
+        # use ${name}_enable, so we also  fetch the $name variable and
+        # interpolate $rcvar accordingly
         rcvar=`egrep "^rcvar=" $SCRIPT | cut -d= -f2 | sed 's/"//g' | tail -1`
+        name=`egrep "^name=" $SCRIPT | cut -d= -f2 | sed 's/"//g' | tail -1`
+        rcvar=$(eval echo "$rcvar")
         if egrep -iq "^${rcvar}=.*yes" $j/run/$jailpath/usr/local/etc/rc.conf; then
             echo $SCRIPT | sed "s|$j/run/$jailpath||"
         fi
@@ -1360,7 +1371,7 @@ get_rc_scripts() {
 }
 
 usage_rc() {
-    fin "Usage: $0 rc <jail> [<mode>] [-r <rc.d script]
+    fin "Usage: $0 rc <jail> [-m <mode>] [-r <rc.d script]
 Execute an rc.d script inside <jail> with parameter <mode>. Options:
 -r <rc.d script>    Execute <rc.d script>. default: execute all enabled scripts."
 }
@@ -1369,15 +1380,14 @@ jaildk_rc() {
     local jail mode rcd jailpath ok script jid
 
     jail=$1
-    mode=$2
-    shift
     shift
     
     rcd=''
 
-    while getopts "r:" arg; do
+    while getopts "r:m:" arg; do
         case $arg in
             r) rcd=${OPTARG};;
+            m) mode=${OPTARG};;
             *) usage_rc;;
         esac
     done
@@ -1597,7 +1607,7 @@ jaildk_reinstall() {
         fi
     fi
 
-    jaildk_install $jail start
+    jaildk_install -m $jail start
     jaildk_jail start $jail
 
     sleep 0.2
@@ -1605,6 +1615,11 @@ jaildk_reinstall() {
     jaildk_jail status $jail
 }
 
+_install_jaildk() {
+    realj=`cd $j; pwd`
+    sed "s|^JAILDIR=.*|JAILDIR=$realj|" $0 > $j/bin/jaildk
+    ex chmod 755 $j/bin/jaildk
+}
 
 jaildk_setup() {
     local j version subdir
@@ -1615,6 +1630,12 @@ jaildk_setup() {
         fin "Usage: $0 setup <base dir for jail environment>"
     fi
 
+    if test -e "$j/bin/jaildk"; then
+        bold "$j/bin/jaildk aleady exists, updating..."
+        _install_jaildk $j
+        return
+    fi
+    
     bold "preparing directories"
     ex mkdir -p $j
     for subdir in etc bin appl base data home log run ports; do
@@ -1674,9 +1695,7 @@ run
 tmp' > $j/etc/.template/mtree.conf
 
     bold "installing jaildk"
-    realj=`cd $j; pwd`
-    sed "s|^JAILDIR=.*|JAILDIR=$realj|" $0 > $j/bin/jaildk
-    ex chmod 755 $j/bin/jaildk
+    _install_jaildk $j
 
     bold "configuring root shell template"
     echo "# root shell inside jail
@@ -1764,6 +1783,7 @@ jaildk_update() {
         if test -n "$gitversion"; then
             if test 1 -eq $(echo "$gitversion > $version" | bc) -o -n "$force"; then
                 echo "Updating jaildk from $version to version $gitversion..."
+                ex make -C $j/git/jaildk
                 ex install -o root -g wheel $j/git/jaildk/jaildk $j/bin/jaildk || die "Failed to update self!"
             else
                 die "jaildk git version unchanged, aborting"
@@ -2035,7 +2055,7 @@ jaildk_thaw() {
 }
 
 usage_ipfw() {
-    echo "Usage: $0 ipfw <jail> <mode>
+    echo "Usage: $0 ipfw <jail> -m <mode>
 [Un]install ipfw rules. <mode> can be start or stop.
 The jail needs to have a ipfw.conf file, containing
 ipfw rules. You can use variables like \$ip and \$ip6
@@ -2047,7 +2067,13 @@ jaildk_ipfw() {
     local jail mode
 
     jail=$1
-    mode=$2
+
+    while getopts "m:" arg; do
+        case $arg in
+            m) mode=${OPTARG};;
+            *) usage_ipfw;;
+        esac
+    done
 
     if test -z "$mode"; then
         usage_ipfw
@@ -2387,7 +2413,7 @@ jaildk_bootstrap() {
 
     # mount build
     if test -n "$PORTS"; then
-        jaildk_build $jail start -b $BASE -v $VERSION
+        jaildk_build $jail -m start -b $BASE -v $VERSION
 
         echo "Installing ports"
         for port in `echo "$PORTS" | sed 's/,/ /g'`; do
@@ -2396,7 +2422,7 @@ jaildk_bootstrap() {
     fi
 
     # install
-    jaildk_install $jail start
+    jaildk_install $jail -m start
 
     # run
     RUN=''
@@ -2471,6 +2497,12 @@ case $runner in
         # eventually calls sudo
         jaildk_login $*
         ;;
+    completion)
+        echo "$JAILDK_COMPLETION"
+        ;;
+    _get_rc_scripts)
+        get_rc_scripts $*
+        ;;
     *)
         # every other management command, if it exists
         if type "jaildk_$runner" 2>&1 > /dev/null; then
@@ -2481,3 +2513,5 @@ case $runner in
         fi
         ;;
 esac
+
+

@@ -21,27 +21,24 @@ reply_version() {
     COMPREPLY=( $(compgen -W "${versions[*]}" -- "$cur") )
 }
 
-rcscripts='mount,ports,mtree,pf'
+functions='mount,ports,mtree,pf'
 modes='start,stop,status,restart'
 
 ### sub cmd base
 subcmd_opts_base=(-b -w)
 
 ### sub cmd build
-# FIXME: -m
 subcmd_opts_build=(-b:@base -v:@version -m:$modes)
 subcmd_args_build=@jail
 
 ### sub cmd clone
-# FIXME: how to fetch version from already selected jail
 subcmd_opts_clone=(-s:@jail -d:@jail -o:@version -n:@version)
 
 ### sub cmd fetchports
 subcmd_opts_fetchports=(-v:@version)
 
 ### sub cmd install
-# FIXME: -m
-subcmd_opts_install=(-m:$modes -r:$rcscripts)
+subcmd_opts_install=(-m:$modes -r:$functions)
 subcmd_args_install=@jail
 
 ### sub cmd uninstall
@@ -72,7 +69,8 @@ subcmd_opts_status=(-v)
 subcmd_args_status=@jail
 
 ### sub cmd rc
-subcmd_opts_rc=(-m:$modes -r:$rcscripts)
+subcmd_opts_rc=(-m:$modes -r)
+subcmd_args_rc=@jail
 
 ### sub cmd ipfw
 subcmd_opts_ipfw=(-m:$modes)
