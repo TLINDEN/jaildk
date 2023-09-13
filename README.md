@@ -1,5 +1,33 @@
 ## jaildk - a FreeBSD jail development kit v2.0.0
 
+## Breaking Changes
+
+It is not possible to upgrade an existing installation of jaildk using
+the builtin `jaildk update` from version 1.x to 2.x!
+
+So, in order to upgrade to the next major version, check out the repo and execute:
+
+```
+make
+make install JAILDIR=/your/jaildir
+```
+
+See below for more details. Starting with 2.0.0 `jaildk update` can be used again.
+
+In addition starting with 2.0.0 the commandlines of the following subcommands changed:
+
+| 1.x                                                   | 2.0.0 up                                                 |
+|-------------------------------------------------------|----------------------------------------------------------|
+| jaildk build <jail> <mode> [-b <base>] [-v <version>] | jaildk build <jail> -m <mode> [-b <base>] [-v <version>] |
+| jaildk install <jail> <mode> [-r function]            | jaildk install <jail> -m <mode> [-r function]            |
+| rc <jail> <mode> [-r <rc.d script>]                   | rc <jail> -m <mode> [-r <rc.d script>]                   |
+| ipfw <jail> <mode>                                    | ipfw <jail> -m <mode>                                    |
+
+So, every subcommand supporting a  mode parameter needs that parameter
+now specified as an argument to the `-m` parameter.
+
+## Introduction
+
 This is  the README for the  FreeBSD jail utility `jaildk`.  It can be
 used to build, update, manage and run jails in a versioned environment.
 
