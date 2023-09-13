@@ -16,12 +16,12 @@ See below for more details. Starting with 2.0.0 `jaildk update` can be used agai
 
 In addition starting with 2.0.0 the commandlines of the following subcommands changed:
 
-| 1.x                                                   | 2.0.0 up                                                 |
-|-------------------------------------------------------|----------------------------------------------------------|
-| jaildk build <jail> <mode> [-b <base>] [-v <version>] | jaildk build <jail> -m <mode> [-b <base>] [-v <version>] |
-| jaildk install <jail> <mode> [-r function]            | jaildk install <jail> -m <mode> [-r function]            |
-| rc <jail> <mode> [-r <rc.d script>]                   | rc <jail> -m <mode> [-r <rc.d script>]                   |
-| ipfw <jail> <mode>                                    | ipfw <jail> -m <mode>                                    |
+| 1.x                                                     | 2.0.0 up                                                   |
+|---------------------------------------------------------|------------------------------------------------------------|
+| `jaildk build <jail> <mode> [-b <base>] [-v <version>]` | `jaildk build <jail> -m <mode> [-b <base>] [-v <version>]` |
+| `jaildk install <jail> <mode> [-r function]`            | `jaildk install <jail> -m <mode> [-r function]`            |
+| `rc <jail> <mode> [-r <rc.d script>]`                   | `rc <jail> -m <mode> [-r <rc.d script>]`                   |
+| `ipfw <jail> <mode>`                                    | `ipfw <jail> -m <mode>`                                    |
 
 So, every subcommand supporting a  mode parameter needs that parameter
 now specified as an argument to the `-m` parameter.
