@@ -592,11 +592,11 @@ pass in quick inet6 proto tcp from any to $ip6 port $prodports keep state
 That's it already. Now install the jail as usual. You can also install
 the pf ruleset for the jail separately:
 
-`jaildk install myjail start -r pf`
+`jaildk install myjail -m start -r pf`
 
 To take look at the rules, execute:
 
-`jaildk install myjail status -r pf`
+`jaildk install myjail -m status -r pf`
 
 You can of  course manipulate the ruleset  manually. `jaildk` installs
 rulesets  into  a jail  specific  anchor  using the  following  naming
