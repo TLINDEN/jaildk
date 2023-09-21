@@ -1344,7 +1344,7 @@ jaildk_jail() {
         case $mode in
             *)
                 service jail $mode $jail
-                jaildk_ipfw $jail $mode
+                jaildk_ipfw $jail -m $mode
                 ;;
         esac
     fi
