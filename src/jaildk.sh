@@ -210,12 +210,11 @@ jaildk_build() {
     jail=$1
     mode=start
     shift
-    shift
     
     BASE=''
     VERSION=''
 
-    while getopts "b:v:m:" arg; do
+    OPTIND=1; while getopts "b:v:m:" arg; do
         case $arg in
             b) BASE=${OPTARG};;
             v) VERSION=${OPTARG};;
@@ -240,13 +239,13 @@ jaildk_build() {
     if test -n "$BASE"; then
         # dito
         base=$BASE
-    fi
-
-    if test -n "$buildbase"; then
-        base="$buildbase"
-    elif test -z "$base"; then
-        # nothing configured, use default: latest
-        base=`ls $j/base | tail -1`
+    else
+        if test -n "$buildbase"; then
+            base="$buildbase"
+        elif test -z "$base"; then
+            # nothing configured, use default: latest
+            base=`ls $j/base | tail -1`
+        fi
     fi
 
     # install the jail to build/
@@ -698,7 +697,7 @@ jaildk_install() {
     base=''
     version=''
 
-    while getopts "r:b:v:wm:" arg; do
+    OPTIND=1; while getopts "r:b:v:wm:" arg; do
         case $arg in
             w) rw=1;;
             b) base=${OPTARG};;
@@ -781,7 +780,7 @@ jaildk_uninstall() {
     base=''
     version=''
 
-    while getopts "wa" arg; do
+    OPTIND=1; while getopts "wa" arg; do
         case $arg in
             w) rw="-w";;
             a) all=1; rw="-w";;
@@ -841,7 +840,7 @@ jaildk_base() {
     force=""
     rw=""
 
-    while getopts "b:wf" arg; do
+    OPTIND=1; while getopts "b:wf" arg; do
         case $arg in
             w) rw=1;;
             b) base=${OPTARG};;
@@ -1027,7 +1026,7 @@ Hints:
 jaildk_clone() {
     local src new srcversion newversion update cloneto clonefrom fs srcmount dstmount opts size perm
 
-    while getopts "s:d:o:n:" arg; do
+    OPTIND=1; while getopts "s:d:o:n:" arg; do
         case $arg in
             o) srcversion=${OPTARG};;
             n) newversion=${OPTARG};;
@@ -1199,7 +1198,7 @@ jaildk_remove() {
     shift
     version=''
 
-    while getopts "v:" arg; do
+    OPTIND=1; while getopts "v:" arg; do
         case $arg in
             v) version=${OPTARG};;
             *) usage_remove;;
@@ -1384,7 +1383,7 @@ jaildk_rc() {
     
     rcd=''
 
-    while getopts "r:m:" arg; do
+    OPTIND=1; while getopts "r:m:" arg; do
         case $arg in
             r) rcd=${OPTARG};;
             m) mode=${OPTARG};;
@@ -1559,7 +1558,7 @@ jaildk_reinstall() {
     jail=$1
     shift
 
-    while getopts "b:v:" arg; do
+    OPTIND=1; while getopts "b:v:" arg; do
         case $arg in
             b) NEWBASE=${OPTARG};;
             v) NEWVERSION=${OPTARG};;
@@ -1764,7 +1763,7 @@ jaildk_update() {
     repo="https://github.com/TLINDEN/jaildk.git"
     mustberoot
 
-    while getopts "f" arg; do
+    OPTIND=1; while getopts "f" arg; do
         case $arg in
             f) force=1;;
             *) usage_update;;
@@ -1804,7 +1803,7 @@ Fetch current portscollection, use <version> or todays timestamp as new version"
 jaildk_fetchports() {
     local version=`date +%Y%m%d`
 
-    while getopts "v:" arg; do
+    OPTIND=1; while getopts "v:" arg; do
         case $arg in
             v) version=${OPTARG};;
             *) usage_fetchports;;
@@ -1865,7 +1864,7 @@ jaildk_freeze() {
     ADDBASE=""
     ADDAPPL=""
 
-    while getopts "abv:" arg; do
+    OPTIND=1; while getopts "abv:" arg; do
         case $arg in
             a) ADDAPPL=1;;
             b) ADDBASE=1;;
@@ -2068,7 +2067,7 @@ jaildk_ipfw() {
 
     jail=$1
 
-    while getopts "m:" arg; do
+    OPTIND=1; while getopts "m:" arg; do
         case $arg in
             m) mode=${OPTARG};;
             *) usage_ipfw;;
@@ -2183,7 +2182,7 @@ jaildk_vnet() {
 
     BRIDGE=''
 
-    while getopts "b:i:r:" arg; do
+    OPTIND=1; while getopts "b:i:r:" arg; do
         case $arg in
             b) BRIDGE=${OPTARG};;
             *) usage_vnet;;
@@ -2273,7 +2272,7 @@ delete directories. Be sure to have backups available!
 jaildk_prune() {
     local BASE APPL JAIL UNUSED
 
-    while getopts "baj:u" arg; do
+    OPTIND=1; while getopts "baj:u" arg; do
         case $arg in
             b) BASE=1;;
             a) APPL=1;;
@@ -2358,7 +2357,7 @@ jaildk_bootstrap() {
     PORTS=''
     IP=''
 
-    while getopts "i:b:v:p:a:" arg; do
+    OPTIND=1; while getopts "i:b:v:p:a:" arg; do
         case $arg in
             b) BASE=${OPTARG};;
             v) VERSION=${OPTARG};;
