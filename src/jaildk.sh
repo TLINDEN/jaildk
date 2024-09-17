@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=2.0.0
+version=2.0.1
 
 # this will  be completed during  build. Don't touch it,  just execute
 # make and use the resulting script!
@@ -2067,6 +2067,11 @@ jaildk_ipfw() {
 
     jail=$1
 
+    if ! test -f "$j/etc/$jail/ipfw.conf"; then
+        # dont do anything in non-ipf shells
+        return
+    fi
+
     OPTIND=1; while getopts "m:" arg; do
         case $arg in
             m) mode=${OPTARG};;
@@ -2078,21 +2083,19 @@ jaildk_ipfw() {
         usage_ipfw
     fi
 
-    if test -f "$j/etc/$jail/ipfw.conf"; then
-        echo
-        bold "Managing IPFW Rules..."
-        case $mode in
-            start)
-                ipfw_delete $jail "y"
-                ipfw_add $jail
-                ;;
-            stop)
-                ipfw_delete $jail                
-                ;;
-        esac
-        bold "... done"
-        echo
-    fi
+    echo
+    bold "Managing IPFW Rules..."
+    case $mode in
+        start)
+            ipfw_delete $jail "y"
+            ipfw_add $jail
+            ;;
+        stop)
+            ipfw_delete $jail                
+            ;;
+    esac
+    bold "... done"
+    echo
 }
 
 ipfw_add() {
