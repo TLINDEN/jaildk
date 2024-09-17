@@ -8,7 +8,7 @@ all:
 	rm -f src/_jaildk-completion.bash
 
 install:
-	sh jaildk setup $JAILDIR
+	sh jaildk setup $(JAILDIR)
 
 clean:
 	rm -f jaildk
