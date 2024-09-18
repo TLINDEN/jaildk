@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=2.0.1
+version=2.0.2
 
 # this will  be completed during  build. Don't touch it,  just execute
 # make and use the resulting script!
@@ -1606,7 +1606,7 @@ jaildk_reinstall() {
         fi
     fi
 
-    jaildk_install -m $jail start
+    jaildk_install $jail -m start
     jaildk_jail start $jail
 
     sleep 0.2
