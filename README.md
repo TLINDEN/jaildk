@@ -143,7 +143,7 @@ For an overview of the provided commands, here's the usage screen:
 Usage: ./jaildk <command> <command-args>
 
 Building Jails:
-base -b <name> [-w]                               - build a new base
+base -b <name> [-w] [-s <script>]                 - build a new base
 build <jail> -m <mode> [-b <base>] [-v <version>] - install a build chroot of a jail
 create                                            - create a new jail from a template
 clone -s <src> -d <dst> [-o <v>] [-n <v>]         - clone an existing jail or jail version

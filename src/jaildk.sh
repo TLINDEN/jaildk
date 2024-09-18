@@ -831,6 +831,8 @@ Build a base directory from bsd install media. Options:
               build stuff. Use this if you want to use the ports
               collection.
 -f            force mode, remove any old dist files.
+-s <script>   install additional scripts to /usr/bin, separate multiple
+              scripts with whitespace.
 "
 }
 
@@ -840,11 +842,13 @@ jaildk_base() {
     base=""
     force=""
     rw=""
+    scripts=""
 
-    OPTIND=1; while getopts "b:wf" arg; do
+    OPTIND=1; while getopts "b:wfs:" arg; do
         case $arg in
             w) rw=1;;
             b) base=${OPTARG};;
+            s) scripts="${OPTARG}";;
             f) force=1;;
             *) usage_base;;
         esac
@@ -927,61 +931,66 @@ var/tmp"
     if test -d "$basedir"; then
         echo "base $basedir already exist!"
         exit 1
-    else
-        ex mkdir -p $basedir
+    fi
 
-        if test -e /usr/freebsd-dist/MANIFEST; then
-            clean=''
-            if test -n "$force"; then
-                clean=1
-            else
-                echo "Found old dist files:"
-                ls -l /usr/freebsd-dist
-                echo -n "Want to remove them [nY]? "
-                read yesno
-                case $yesno in
-                    y|Y) clean=1;;
-                    *)   clean='';;
-                esac
-            fi
+    ex mkdir -p $basedir
 
-            if test -n "$clean"; then
-                ex rm -f /usr/freebsd-dist/*
-            fi
-        fi
-
-        bsdinstall jail $basedir || exit 1
-
-        if test -z "$rw"; then
-            # run base
-            for file in $removelist; do
-                ex rm -rf $basedir/$file
-            done
+    if test -e /usr/freebsd-dist/MANIFEST; then
+        clean=''
+        if test -n "$force"; then
+            clean=1
         else
-            # build base with ports support
-            ex mkdir -p $basedir/usr/ports
-        fi
-
-        ex mkdir $basedir/home
-        ex rm -rf $basedir/var/db
-        ex ln -s /usr/local/db $basedir/var/db
-
-        # add some symlinks from /var to /tmp to make pkg work properly 
-        ex rm -rf $basedir/var/tmp $basedir/var/cache $basedir/var/run
-        ex ln -s /tmp $basedir/var/tmp
-        ex ln -s /tmp $basedir/var/cache
-        ex ln -s /tmp $basedir/var/run
-
-        if test -n "$rw"; then
-            echo "You have choosen to create a build base with ports support"
-            echo -n "Want to fetch the ports collection now [Yn]? "
+            echo "Found old dist files:"
+            ls -l /usr/freebsd-dist
+            echo -n "Want to remove them [nY]? "
             read yesno
             case $yesno in
-                y|Y|yes|YES)
-                    jaildk_fetchports
-                    ;;
+                y|Y) clean=1;;
+                *)   clean='';;
             esac
         fi
+
+        if test -n "$clean"; then
+            ex rm -f /usr/freebsd-dist/*
+        fi
+    fi
+
+    bsdinstall jail $basedir || exit 1
+
+    if test -z "$rw"; then
+        # run base
+        for file in $removelist; do
+            ex rm -rf $basedir/$file
+        done
+    else
+        # build base with ports support
+        ex mkdir -p $basedir/usr/ports
+    fi
+    
+    ex mkdir $basedir/home
+    ex rm -rf $basedir/var/db
+    ex ln -s /usr/local/db $basedir/var/db
+
+    # add some symlinks from /var to /tmp to make pkg work properly 
+    ex rm -rf $basedir/var/tmp $basedir/var/cache $basedir/var/run
+    ex ln -s /tmp $basedir/var/tmp
+    ex ln -s /tmp $basedir/var/cache
+    ex ln -s /tmp $basedir/var/run
+
+    # any scripts?
+    for script in $scripts; do
+        ex install -m 755 $script -o root -g wheel $basedir/usr/bin/$script
+    done
+    
+    if test -n "$rw"; then
+        echo "You have choosen to create a build base with ports support"
+        echo -n "Want to fetch the ports collection now [Yn]? "
+        read yesno
+        case $yesno in
+            y|Y|yes|YES)
+                jaildk_fetchports
+                ;;
+        esac
     fi
 }
 
