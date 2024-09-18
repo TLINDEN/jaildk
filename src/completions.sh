@@ -21,6 +21,17 @@ reply_version() {
     COMPREPLY=( $(compgen -W "${versions[*]}" -- "$cur") )
 }
 
+# we're taking the easy path here. There might be cases where the
+# $name_enable variable doesn't match the actual rc-Script, which
+# we will not catch the way we're doing it here, but these are rare
+# and the user can specify something manually as well. Also this
+# method is way faster than executing rcorder inside the jail
+reply_rcscripts() {
+  local jail=${COMP_WORDS[2]}
+  local scripts=$(ls $JAILDIR/run/$jail/usr/local/etc/rc.d)
+  COMPREPLY=( $(compgen -W "${scripts[*]}" -- "$cur") )
+}
+
 functions='mount,ports,mtree,pf'
 modes='start,stop,status,restart'
 
@@ -69,7 +80,7 @@ subcmd_opts_status=(-v)
 subcmd_args_status=@jail
 
 ### sub cmd rc
-subcmd_opts_rc=(-m:$modes -r)
+subcmd_opts_rc=(-m:$modes -r:@rcscripts)
 subcmd_args_rc=@jail
 
 ### sub cmd ipfw

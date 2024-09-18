@@ -1,4 +1,3 @@
-- fix the 3 mode commands to use -m so completion works correctly
 - vnet ipv6 doesnt work anymore
   UPDATE: with auto_linklocal seems to work after some seconds
 - on reboot, no pf will be started
