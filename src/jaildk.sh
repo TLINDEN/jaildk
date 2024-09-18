@@ -255,6 +255,7 @@ jaildk_build() {
         start)
             # make it usable
             ex chroot $j/build/$jail /etc/rc.d/ldconfig onestart
+            ex chroot $j/build/$jail pkg-static bootstrap -f
             ex mkdir -p $j/build/$jail/usr/local/db
             ;;
     esac
