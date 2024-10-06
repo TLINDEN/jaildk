@@ -340,6 +340,11 @@ rc_pf() {
     
     load_jail_config $jail
 
+    if test -z "$ip" -a -z "$ip6"; then
+        echo "PF not supported without configured ip address!" >&2
+        return
+    fi
+    
     # TODO:
     # - put this into a separate function
     # - clean up if generation of pf-ruleset.conf fails somehow
@@ -1652,7 +1657,11 @@ jaildk_setup() {
 
     version=`date +%Y%m%d`
 
-    for subdir in appl/default-$version/db/ports appl/default-$version/etc etc/.template/etc-$version etc/.template/local-etc-$version home/.template/root-$version log/.template-$version; do
+    for subdir in appl/default-$version/db/ports \
+                      appl/default-$version/etc \
+                      etc/.template/etc-$version \
+                      etc/.template/local-etc-$version \
+                      home/.template/root-$version log/.template-$version; do
         ex mkdir -p $j/$subdir
     done
 
