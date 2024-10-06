@@ -112,7 +112,7 @@ die() {
     exit 1
 }
 
-load-jail-config() {
+load_jail_config() {
     local jail=$1
     if test -d $j/etc/$jail; then
         # everything inside gets global
@@ -229,7 +229,7 @@ jaildk_build() {
 
     die_if_not_exist $jail $VERSION
 
-    load-jail-config $jail
+    load_jail_config $jail
 
     if test -n "$VERSION"; then
         # overridden with -v
@@ -338,7 +338,7 @@ rc_pf() {
     conf=$j/etc/$jail/pf.conf
     ruleset=$j/etc/$jail/pf-ruleset.conf
     
-    load-jail-config $jail
+    load_jail_config $jail
 
     # TODO:
     # - put this into a separate function
@@ -520,7 +520,7 @@ rc_ports() {
     rw=$5
     rcscript=ports
 
-    load-jail-config $jail
+    load_jail_config $jail
 
     if test -z "$ports"; then
         # ports not configured, abort
@@ -563,7 +563,7 @@ rc_mount() {
     rw=$5
     rcscript=mount
 
-    load-jail-config $jail
+    load_jail_config $jail
 
     conf=$j/etc/$jail/$rcscript.conf
 
@@ -1063,7 +1063,7 @@ jaildk_clone() {
     fi
 
     die_if_not_exist $src "Source jail"
-    load-jail-config $src
+    load_jail_config $src
 
     if test -z "$srcversion"; then
         srcversion=$version
@@ -1178,8 +1178,7 @@ jaildk_create() {
     mkdir -p $j/etc/$jail
     
     jaildk_clone -s $src -d $jail -o $srcversion -n $newversion
-    # some perl magic to extract the hostname (if any) from /etc/jail.conf - and write it into the jails rc.conf
-    jailhostname=$(cat /etc/jail.conf | tr -d '\t\r\n ' | perl -ne '$_ =~ /.*'"$newjail"'(\{(?:\{.*\}|[^{])*\})|\w+/; print $1;' | grep -oE 'hostname=[^;]+' | cut -d= -f2)
+    jailhostname=$(cat /etc/jail.conf | grep -E "^$jail" -A50 | sed '/\}/q' | grep hostname | cut -d\" -f2)
     if [ -n "$jailhostname" ]; then
         echo "new name: $jailhostname"
         echo "in path $j/etc/$jail/local-etc-$newversion/rc.conf"
@@ -1300,7 +1299,7 @@ jaildk_jail() {
                 build='no'
                 base=''
 
-                load-jail-config $jail
+                load_jail_config $jail
 
                 _eip=''
                 for map in $maps; do
@@ -1312,8 +1311,8 @@ jaildk_jail() {
                 done
 
                 if jls -j $jail > /dev/null 2>&1; then
-                    # jail is running
-                    eval `jls -j $jail -qn | perl -n -e 'chomp; %j = map { ($a,$b) = split /=/; $a=~ s/\.//g; $a => $b } split/ /; foreach (keys %j) {print "$_=$j{$_}\n"}'`
+                    # jail is running, get some data about jail
+                    eval $(jls -j v6 -qn ip4.addr ip6.addr jid)
                     if test -n "$ip4addr"; then
                         ip=$ip4addr
                     else
@@ -1592,7 +1591,7 @@ jaildk_reinstall() {
     sync
 
     if test -n "$NEWBASE" -o -n "$NEWVERSION"; then
-        load-jail-config $jail
+        load_jail_config $jail
         ts=`date +%Y%m%d%H%M`
         change=''
         if test $NEWBASE != $base; then
@@ -1900,7 +1899,7 @@ jaildk_freeze() {
         esac
     fi
 
-    load-jail-config $jail
+    load_jail_config $jail
 
     if test -n "$VERSION"; then
         version=$VERSION
@@ -2114,7 +2113,7 @@ ipfw_add() {
     jail=$1
 
     # support jail variables as well
-    load-jail-config $jail
+    load_jail_config $jail
 
     if test -z $ip; then
         # Getting current jails IP..
@@ -2208,7 +2207,7 @@ jaildk_vnet() {
 
     die_if_not_exist $jail
 
-    load-jail-config $jail
+    load_jail_config $jail
 
     if test -z "$ip" -a -z "$gw"; then
         usage_vnet
@@ -2333,7 +2332,7 @@ jaildk_prune() {
 
     elif test -n "$JAIL"; then
         die_if_not_exist $JAIL
-        load-jail-config $JAIL
+        load_jail_config $JAIL
 
         if test -z "$UNUSED"; then
             bold "Current Active jail version for jail $JAIL:" > /dev/stderr
@@ -2470,6 +2469,16 @@ mustberoot() {
     fi
 }
 
+sanitycheck() {
+    # check if certain programs are installed
+    for program in cpdup; do
+        if ! command -v $program 2>&1 >/dev/null; then
+            echo "$program must be installed!" >&2
+            exit1
+        fi
+    done
+}
+
 ##########################
 #
 # main()
@@ -2493,6 +2502,8 @@ shift
 if test -z "$runner"; then
     usage_jaildk
 fi
+
+sanitycheck
 
 case $runner in
     start|stop|restart)
