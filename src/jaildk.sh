@@ -1131,7 +1131,7 @@ jaildk_clone() {
         fi
 
         bold "To mount the build chroot of the new jail, execute:"
-        echo "jaildk build $new start"
+        echo "jaildk build $new -m start"
         echo
         bold "To login into the build chroot"
         echo "jaildk blogin $new"
