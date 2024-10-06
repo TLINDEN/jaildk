@@ -223,7 +223,7 @@ jaildk_build() {
         esac
     done
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_build
     fi
 
@@ -709,7 +709,7 @@ jaildk_install() {
         esac
     done
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_install
     fi
 
@@ -789,7 +789,7 @@ jaildk_uninstall() {
         esac
     done
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_uninstall
     fi
 
@@ -1167,7 +1167,7 @@ jaildk_create() {
     
     src=.template
     
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_create
     fi
 
@@ -1214,7 +1214,7 @@ jaildk_remove() {
         esac
     done
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_remove
     fi
 
@@ -1282,7 +1282,7 @@ jaildk_jail() {
 
     if test "x$mode" = "xstatus"; then
         (
-            if test -z "$jail"; then
+            if test -z "$jail" -o "$jail" = "-h"; then
                 bold "Running jails:"
                 lookup='*'
             else
@@ -1345,7 +1345,7 @@ jaildk_jail() {
         if test -n "$jail"; then
             jaildk_rc $jail -m status
         fi
-    elif test -z "$jail"; then
+    elif test -z "$jail" -o "$jail" = "-h"; then
         usage_$mode
     else
         bold "Jail $jail $mode:"
@@ -1404,7 +1404,7 @@ jaildk_rc() {
         rcd='all'
     fi
 
-    if test -z "$jail" -o -z "$mode"; then
+    if test -z "$jail" -o "$jail" = "-h" -o -z "$mode"; then
         usage_rc
     fi
 
@@ -1464,7 +1464,7 @@ jaildk_blogin() {
 
     jail=$1
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         file=`basename $0`
         if test "$file" = "jaildk"; then
             file="$0 blogin"
@@ -1513,7 +1513,7 @@ jaildk_login() {
     me=`id -u` 
     jexec="jexec"
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         file=`basename $0`
         if test "$file" = "jaildk"; then
             file="$0 jlogin"
@@ -1575,7 +1575,7 @@ jaildk_reinstall() {
         esac
     done
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_reinstall
     fi
 
@@ -1882,7 +1882,7 @@ jaildk_freeze() {
         esac
     done
     
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_freeze
     fi
 
@@ -2380,7 +2380,7 @@ jaildk_bootstrap() {
         esac
     done
 
-    if test -z "$jail"; then
+    if test -z "$jail" -o "$jail" = "-h"; then
         usage_bootstrap
     fi
 
