@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=2.0.2
+version=2.0.3
 
 # this will  be completed during  build. Don't touch it,  just execute
 # make and use the resulting script!
