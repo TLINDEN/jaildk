@@ -24,9 +24,11 @@ jobs:
           sysctl hw.ncpu
           sysctl hw.physmem
           sysctl hw.usermem
+          ls -la
           ifconfig em0 172.16.0.1/32 alias
-          make
-          yes | make install
+          ifconfig -a
+          cp src/jaildk.sh jaildk
+          sh jaildk setup /jail
           cp .github/assets/jail.conf /etc/
           /jail/bin/jaildk create test
           ls -ld /jail/etc/test
