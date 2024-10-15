@@ -7,15 +7,16 @@ jobs:
     runs-on: ubuntu-latest
     name: A job to run test in FreeBSD
     env:
-      PATH: "$PATH:/jail/bin
+      PATH: "$PATH:/jail/bin"
     steps:
-    - uses: actions/checkout@v4
+    - name: checkout
+      uses: actions/checkout@v4
     - name: Test in FreeBSD
-      id: testjaildk
       uses: vmactions/freebsd-vm@v1
+      id: testjaildk
       with:
         release: "14.1"
-        envs: 'PATH'
+        envs: "PATH"
         usesh: true
         prepare: |
           pkg install -y curl
