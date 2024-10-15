@@ -1,0 +1,42 @@
+name: Test-Jaildk
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: A job to run test in FreeBSD
+    env:
+      PATH: "$PATH:/jail/bin
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test in FreeBSD
+      id: testjaildk
+      uses: vmactions/freebsd-vm@v1
+      with:
+        release: "14.1"
+        envs: 'PATH'
+        usesh: true
+        prepare: |
+          pkg install -y curl
+
+        run: |
+          freebsd-version
+          sysctl hw.model
+          sysctl hw.ncpu
+          sysctl hw.physmem
+          sysctl hw.usermem
+          ifconfig em0 172.16.0.1/32 alias
+          make
+          yes | make install
+          cp .github/assets/jail.conf /etc/
+          jaildk create test
+          ls -ld /jail/etc/test
+          jaildk build test -m start
+          df -h /jail/build/test/etc
+          echo 'sshd_enable="Yes"' > /jail/build/test/usr/local/etc/rc.conf
+          chroot /jail/build/test /etc/rc.d/sshd keygen
+          jaildk start test
+          jaildk status | grep -E "test|Jail"
+          
+          
