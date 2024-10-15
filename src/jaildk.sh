@@ -1286,15 +1286,14 @@ jaildk_jail() {
     jail=$2
 
     if test "x$mode" = "xstatus"; then
+        if test -z "$jail" -o "$jail" = "-h"; then
+            bold "Running jails:"
+            lookup='*'
+        else
+            bold "Status of $jail:"
+            lookup=$jail
+        fi
         (
-            if test -z "$jail" -o "$jail" = "-h"; then
-                bold "Running jails:"
-                lookup='*'
-            else
-                bold "Status $jail:"
-                lookup=$jail
-            fi
-
             echo "Jail IP-Address Path Is-Running RW-mounted Current-Version Base"
             grep -h "name=" $j/etc/$lookup/jail.conf | cut -d= -f2 | while read jail; do
                 jid=''
@@ -1317,7 +1316,7 @@ jaildk_jail() {
 
                 if jls -j $jail > /dev/null 2>&1; then
                     # jail is running, get some data about jail
-                    eval $(jls -j v6 -qn ip4.addr ip6.addr jid)
+                    eval $(jls -j $jail -qn ip4.addr ip6.addr jid path | sed 's/\.addr/addr/g')
                     if test -n "$ip4addr"; then
                         ip=$ip4addr
                     else
