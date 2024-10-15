@@ -27,6 +27,7 @@ jobs:
           ls -la
           ifconfig em0 172.16.0.1/32 alias
           ifconfig -a
+          set -x -e
           sysrc jail_enable="YES"
           cp .github/assets/jail.conf /etc/
 
