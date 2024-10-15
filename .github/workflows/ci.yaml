@@ -35,7 +35,7 @@ jobs:
 
           fetch https://download.freebsd.org/ftp/releases/amd64/amd64/14.1-RELEASE/base.txz -o /jail/base/14.1-RELEASE-base.txz
           mkdir -p /jail/base/14.1-RELEASE
-          tar -xf /jail/media/14.1-RELEASE-base.txz -C /jail/base/14.1-RELEASE --unlink
+          tar -xf /jail/base/14.1-RELEASE-base.txz -C /jail/base/14.1-RELEASE --unlink
 
           /jail/bin/jaildk create test
           ls -l /jail/etc/test
