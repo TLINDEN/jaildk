@@ -5,9 +5,7 @@ on: [push]
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: A job to run test in FreeBSD
-    env:
-      PATH: "$PATH:/jail/bin"
+    name: Test jaildk on FreeBSD
     steps:
     - name: checkout
       uses: actions/checkout@v4
@@ -16,7 +14,6 @@ jobs:
       id: testjaildk
       with:
         release: "14.1"
-        envs: "PATH"
         usesh: true
         prepare: |
           pkg install -y curl
@@ -31,13 +28,13 @@ jobs:
           make
           yes | make install
           cp .github/assets/jail.conf /etc/
-          jaildk create test
+          /jail/bin/jaildk create test
           ls -ld /jail/etc/test
-          jaildk build test -m start
+          /jail/bin/jaildk build test -m start
           df -h /jail/build/test/etc
           echo 'sshd_enable="Yes"' > /jail/build/test/usr/local/etc/rc.conf
           chroot /jail/build/test /etc/rc.d/sshd keygen
-          jaildk start test
-          jaildk status | grep -E "test|Jail"
+          /jail/bin/jaildk start test
+          /jail/bin/jaildk status | grep -E "test|Jail"
           
           
