@@ -27,6 +27,7 @@ jobs:
           ls -la
           ifconfig em0 172.16.0.1/32 alias
           ifconfig -a
+          sysrc jail_enable="YES"
           cp src/jaildk.sh jaildk
           sh jaildk setup /jail
           cp .github/assets/jail.conf /etc/
