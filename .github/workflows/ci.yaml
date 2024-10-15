@@ -28,15 +28,23 @@ jobs:
           ifconfig em0 172.16.0.1/32 alias
           ifconfig -a
           sysrc jail_enable="YES"
+          cp .github/assets/jail.conf /etc/
+
           cp src/jaildk.sh jaildk
           sh jaildk setup /jail
-          cp .github/assets/jail.conf /etc/
+
+          fetch https://download.freebsd.org/ftp/releases/amd64/amd64/14.1-RELEASE/base.txz -o /jail/base/14.1-RELEASE-base.txz
+          mkdir -p /jail/base/14.1-RELEASE
+          tar -xf /jail/media/14.1-RELEASE-base.txz -C /jail/base/14.1-RELEASE --unlink
+
           /jail/bin/jaildk create test
-          ls -ld /jail/etc/test
+          ls -l /jail/etc/test
           /jail/bin/jaildk build test -m start
           df -h /jail/build/test/etc
+
           echo 'sshd_enable="Yes"' > /jail/build/test/usr/local/etc/rc.conf
           chroot /jail/build/test /etc/rc.d/sshd keygen
+
           /jail/bin/jaildk start test
           /jail/bin/jaildk status | grep -E "test|Jail"
           
