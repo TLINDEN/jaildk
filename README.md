@@ -1,3 +1,5 @@
+[![Actions](https://github.com/tlinden/jaildk/actions/workflows/ci.yaml/badge.svg)](https://github.com/tlinden/jaildk/actions)
+
 ## jaildk - a FreeBSD jail development kit v2.0.0
 
 ## Breaking Changes
