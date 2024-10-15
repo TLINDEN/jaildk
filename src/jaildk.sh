@@ -2482,7 +2482,7 @@ sanitycheck() {
     for program in cpdup; do
         if ! command -v $program 2>&1 >/dev/null; then
             echo "$program must be installed!" >&2
-            exit1
+            exit 1
         fi
     done
 }
