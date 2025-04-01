@@ -1065,6 +1065,10 @@ jaildk_clone() {
             die "new version must be different from source version!"
         fi
         update=1
+    else
+        if test -e "$j/etc/$new/mount.conf" -o -e "$j/etc/$new/jail.conf"; then
+            die "Destination jail $new already exist, cloning would overwrite it!"
+        fi
     fi
 
     die_if_not_exist $src "Source jail"
