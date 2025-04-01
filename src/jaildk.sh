@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=2.0.3
+version=2.0.4
 
 # this will  be completed during  build. Don't touch it,  just execute
 # make and use the resulting script!
@@ -1155,7 +1155,7 @@ jaildk_clone() {
         # FIXME: possibly not needed! see comment in jaildk_create()
         # jail=$new
         bold "To mount the build chroot of the new jail, execute:"
-        echo "jaildk build $new start -b $base -v $newversion"
+        echo "jaildk build $new -m start -b $base -v $newversion"
     fi
 }
 
