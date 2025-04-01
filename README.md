@@ -1,6 +1,6 @@
 [![Actions](https://github.com/tlinden/jaildk/actions/workflows/ci.yaml/badge.svg)](https://github.com/tlinden/jaildk/actions)
 
-## jaildk - a FreeBSD jail development kit v2.0.0
+## jaildk - a FreeBSD jail development kit v2.0.4
 
 ## Breaking Changes
 
@@ -609,6 +609,45 @@ scheme: `/jail/<jail name>`. So, for example to view the rules, execute:
 Manipulate a jail specific table:
 
 `pfctl  -a /jail/myjail -t blocked -T show`
+
+## Generating pf rule sets
+
+It is also possible to let jaildk generate the pf rule sets from the
+jail config. You can generate `map`s and `rule`s. Maps will be used
+for mapping ipv4 connections and rules primarily for ipv6.
+
+A map is defined by a name. You can define many maps. Example:
+
+```toml
+map_prom_exposed_port="9100"
+map_prom_exposed_ip="172.16.1.1"
+map_prom_allow_from="10.2.3.4" # optional, default: any allowed
+```
+
+Then you reference the maps like this:
+
+```toml
+maps="prom web git"
+```
+
+You can also specify the ip address used to connect to the outside:
+
+```toml
+masq_ip="172.16.1.1"
+```
+
+Rules are being used for incoming ipv6 traffic, which is being routed
+only. The semtantics are the same:
+
+```toml
+rules="web git"
+
+rule_web_proto="tcp"
+rule_web_port="{80,443}"
+
+rule_git_proto="tcp"
+rule_git_port="22"
+```
 
 ## Getting help
 
