@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=2.0.4
+version=2.0.5
 
 # this will  be completed during  build. Don't touch it,  just execute
 # make and use the resulting script!
@@ -1532,7 +1532,7 @@ jaildk_login() {
     fi
 
     jid=""
-    jid=`jls | grep "$jail" | awk '{print $1}'`
+    jid=$(jls -j "$jail" jid)
 
     if test -z "$jid"; then
         echo "jail $jail doesn't run!"
