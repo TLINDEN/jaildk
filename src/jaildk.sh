@@ -1781,7 +1781,7 @@ jaildk_update() {
     rcscript=update
     force=''
 
-    repo="https://github.com/TLINDEN/jaildk.git"
+    repo="https://codeberg.org/scip/jaildk.git"
     mustberoot
 
     OPTIND=1; while getopts "f" arg; do

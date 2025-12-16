@@ -1,5 +1,3 @@
-[![Actions](https://github.com/tlinden/jaildk/actions/workflows/ci.yaml/badge.svg)](https://github.com/tlinden/jaildk/actions)
-
 ## jaildk - a FreeBSD jail development kit v2.0.4
 
 ## Breaking Changes
@@ -656,7 +654,7 @@ that's the best way for me to forget to do something.
 
 In order to report a bug, unexpected behavior, feature requests
 or to submit a patch, please open an issue on github:
-https://github.com/TLINDEN/jaildk/issues.
+https://codeberg.org/scip/jaildk/issues.
 
 ## Copyright and license
 
@@ -670,5 +668,5 @@ F.Sass (Culsu)
 
 ## Project homepage
 
-https://github.com/TLINDEN/jaildk
+https://codeberg.org/scip/jaildk
 
