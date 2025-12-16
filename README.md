@@ -1,3 +1,10 @@
+> [!CAUTION]
+> This software is now being maintained on [Codeberg](https://codeberg.org/scip/leo/).
+>
+> However, due to limitations with woodpecker FreeBSD support, CI test workflows are still being executed here.
+>
+> Devs: no need to push to codeberg and github, there's a mirror script running somewhere else.
+
 ## jaildk - a FreeBSD jail development kit v2.0.4
 
 ## Breaking Changes
