@@ -43,7 +43,7 @@ Execute:
 GOOS=freebsd go build
 ```
 
-Copy the newly built binaries `dist/woodpecker-agent` into the VM to
+Copy the newly built binaries into the VM to
 `/usr/local/bin`.
 
 ```default
