@@ -1,0 +1,53 @@
+#
+# CAUTION: this pipeline  needs a FreeBSD VM, refer  for the README.md
+# in this directory for details!
+
+matrix:
+  release:
+    - 14.3-RELEASE-p7
+  releaselink:
+    - 14.3-RELEASE
+
+labels:
+  platform: freebsd/amd64
+
+steps:
+  test:
+    image: bash
+    when:
+      event: [push]
+    commands:
+      - freebsd-version
+      - uname -a
+      - sysctl hw.model
+      - sysctl hw.ncpu
+      - sysctl hw.physmem
+      - sysctl hw.usermem
+
+      # clean up earlier runs, if any
+      - if jls | grep -q test; then jail -r test; fi
+      - mount | cut -d' ' -f3 | grep /jail | sed '1!G;h;$!d' | while read D; do umount $D; done
+      - chflags -R noschg /jail
+      - rm -rf /jail
+      
+      - ifconfig vtnet0 172.16.0.1/32 alias
+      - ifconfig vtnet0
+
+      - sysrc jail_enable="YES"
+      - cp .woodpecker/assets/jail.conf /etc/
+
+      - cp src/jaildk.sh jaildk
+      - sh jaildk setup /jail
+
+      - if ! test -e /jail/base/${release}-base.txz; then fetch https://download.freebsd.org/ftp/releases/amd64/amd64/${releaselink}/base.txz -o /jail/base/${release}-base.txz; mkdir -p /jail/base/${release}; tar -xf /jail/base/${release}-base.txz -C /jail/base/${release} --unlink; fi
+
+      - /jail/bin/jaildk create test
+      - ls -l /jail/etc/test
+      - /jail/bin/jaildk build test -m start
+      - df -h /jail/build/test/etc
+
+      - echo 'sshd_enable="Yes"' > /jail/build/test/usr/local/etc/rc.conf
+      - chroot /jail/build/test /etc/rc.d/sshd keygen
+
+      - /jail/bin/jaildk start test
+      - /jail/bin/jaildk status | grep -E "test|Jail"
