@@ -1,6 +1,10 @@
 name: Test-Jaildk
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
+
 
 jobs:
   test:
