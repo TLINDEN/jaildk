@@ -8,7 +8,7 @@ since it is a jail management tool.
 So, this is my setup:
 
 I deployed a freebsd VM on Hetzner Cloud: `ci-agent.daemon.de`. It
-runs the `woodpecker-agent` build for freebsd. The agent runs as rool
+runs the `woodpecker-agent` built for freebsd. The agent runs as root
 directly on the host. This is a security risk and the reason why we
 use a VM.
 
