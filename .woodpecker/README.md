@@ -1,6 +1,6 @@
 ## Running CI Tests with Woodpecker-CI on FreeBSD
 
-By default the woodpecker intance on Codeberg doesn't support
+By default the woodpecker instance on Codeberg doesn't support
 FreeBSD. Running FreeBSD inside a qemu VM in a linux docker image
 didn't work. Also, this particular tool needs to run outside a jail,
 since it is a jail management tool.
