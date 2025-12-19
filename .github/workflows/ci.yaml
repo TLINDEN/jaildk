@@ -17,7 +17,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1
       id: testjaildk
       with:
-        release: "14.1"
+        release: "14.3"
         usesh: true
         prepare: |
           pkg install -y curl cpdup
@@ -38,9 +38,9 @@ jobs:
           cp src/jaildk.sh jaildk
           sh jaildk setup /jail
 
-          fetch https://download.freebsd.org/ftp/releases/amd64/amd64/14.1-RELEASE/base.txz -o /jail/base/14.1-RELEASE-base.txz
-          mkdir -p /jail/base/14.1-RELEASE
-          tar -xf /jail/base/14.1-RELEASE-base.txz -C /jail/base/14.1-RELEASE --unlink
+          fetch https://download.freebsd.org/ftp/releases/amd64/amd64/14.3-RELEASE/base.txz -o /jail/base/14.3-RELEASE-base.txz
+          mkdir -p /jail/base/14.3-RELEASE
+          tar -xf /jail/base/14.3-RELEASE-base.txz -C /jail/base/14.3-RELEASE --unlink
 
           /jail/bin/jaildk create test
           ls -l /jail/etc/test
