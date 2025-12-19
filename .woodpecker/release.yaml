@@ -10,7 +10,7 @@ steps:
     image: alpine:latest
     commands:
       - apk update
-      - apk add --no-cache bash git
+      - apk add --no-cache bash git build-base
       - make
       - file ${CI_REPO_NAME}
       - mv ${CI_REPO_NAME} ${CI_REPO_NAME}-freebsd-all-$CI_COMMIT_TAG
