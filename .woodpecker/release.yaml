@@ -1,0 +1,28 @@
+# build release
+
+labels:
+  platform: linux/amd64
+    
+steps:
+  compile:
+    when:
+      event: [tag,manual]
+    image: alpine:latest
+    commands:
+      - apk update
+      - apk add --no-cache bash git
+      - make
+      - file ${CI_REPO_NAME}
+      - mv ${CI_REPO_NAME} ${CI_REPO_NAME}-freebsd-all-$CI_COMMIT_TAG
+
+  release:
+    image: alpine:latest
+    when:
+      event: [tag,manual]
+    environment:
+      DEPLOY_TOKEN:
+        from_secret: DEPLOY_TOKEN
+    commands:
+      - apk update
+      - apk add --no-cache bash httpie jq git
+      - .woodpecker/release.sh ${CI_REPO_NAME}-*
